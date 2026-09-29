@@ -1,0 +1,89 @@
+/* ─────────────────────────────────────────────────────────────
+   Tema Servicom Global 2026.
+   Único lugar donde se definen colores y fuentes; styles.css solo
+   usa las variables semánticas de la segunda sección.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  /* Paleta oficial */
+  --sg-negro: #000000;
+  --sg-verde: #6cb700;
+  --sg-verde-texto: #3d6b00; /* verde apto para texto sobre fondos claros */
+  --sg-fondo: #f4f1ea;
+  --sg-blanco: #ffffff;
+
+  /* Neutros derivados del negro */
+  --sg-gris-900: #1a1a1a;
+  --sg-gris-800: #262626;
+  --sg-gris-700: #333333;
+  --sg-gris-600: #595959;
+  --sg-gris-500: #767676;
+  --sg-gris-300: #c4c4c4;
+  --sg-gris-200: #dedcd6;
+  --sg-gris-100: #ecebe6;
+
+  /* Estados (solo errores y advertencias, siempre acompañados de ícono o texto) */
+  --sg-rojo: #b42318;
+  --sg-rojo-fondo: #fdeceb;
+  --sg-rojo-suave: #fff6f5;
+  --sg-rojo-borde: #f1c3bf;
+  --sg-ambar: #8a5a00;
+  --sg-ambar-fondo: #fff1cc;
+  --sg-ambar-suave: #fffaeb;
+  --sg-ambar-borde: #e0a526;
+  --sg-verde-fondo: #eaf4da;
+  --sg-verde-borde: #bddc8f;
+  --sg-verde-hover: #5fa200;
+
+  /* ── Variables semánticas ─────────────────────────────── */
+  --bg: var(--sg-fondo);
+  --surface: var(--sg-blanco);
+  --surface-muted: var(--sg-gris-100);
+  --border: var(--sg-gris-200);
+  --border-strong: var(--sg-gris-300);
+  --text: var(--sg-negro);
+  --text-muted: var(--sg-gris-600);
+  --text-inverse: var(--sg-blanco);
+  --placeholder: var(--sg-gris-500);
+
+  --brand: var(--sg-negro);
+  --brand-accent: var(--sg-verde);
+  --brand-accent-hover: var(--sg-verde-hover);
+  --on-brand-accent: var(--sg-negro); /* nunca texto blanco sobre verde */
+
+  --sidebar-bg: var(--sg-negro);
+  --sidebar-text: var(--sg-gris-300);
+  --sidebar-border: var(--sg-gris-700);
+  --sidebar-hover: var(--sg-gris-800);
+
+  --ok: var(--sg-verde-texto);
+  --ok-bg: var(--sg-verde-fondo);
+  --ok-border: var(--sg-verde-borde);
+  --warn: var(--sg-ambar);
+  --warn-bg: var(--sg-ambar-fondo);
+  --warn-soft: var(--sg-ambar-suave);
+  --warn-border: var(--sg-ambar-borde);
+  --error: var(--sg-rojo);
+  --error-bg: var(--sg-rojo-fondo);
+  --error-soft: var(--sg-rojo-suave);
+  --error-border: var(--sg-rojo-borde);
+
+  --focus: var(--sg-negro);
+  --focus-on-dark: var(--sg-verde);
+  --focus-ring: rgb(108 183 0 / 35%);
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  --shadow-raised: 0 8px 24px rgb(0 0 0 / 8%);
+
+  /* Tipografía */
+  --font: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; /* solo SKU, EAN y segmentos */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+
+  color-scheme: light;
+}
