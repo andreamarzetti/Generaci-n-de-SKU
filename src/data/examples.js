@@ -1,5 +1,5 @@
 // Ejemplos precargables. Todos salen de casos reales: el paso a paso del 21/09
-// o los artículos de datosRealesLS2.json. No se inventan códigos.
+// o los artículos de datosRealesTodasLasMarcas.json. No se inventan códigos.
 import { articlesBySupplierPrefix, findGenerico } from './realData'
 import { normalizeSize } from '../rules/sizes'
 

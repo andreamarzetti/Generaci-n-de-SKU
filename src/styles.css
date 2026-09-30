@@ -750,3 +750,8 @@ p {
   .action-bar__buttons { width: 100%; }
   .action-bar__buttons .btn { flex: 1; }
 }
+
+/* ── Talles por grupo (motores) ─────────────────────── */
+.size-group { display: flex; flex-direction: column; gap: 4px; }
+.size-group + .size-group { margin-top: 6px; }
+.size-group__label { font-size: 11px; font-weight: var(--weight-semibold); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }

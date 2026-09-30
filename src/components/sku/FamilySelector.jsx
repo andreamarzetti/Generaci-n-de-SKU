@@ -1,6 +1,6 @@
-export function FamilySelector({ families, value, onChange }) {
+export function FamilySelector({ families, value, onChange, label = 'Familia' }) {
   return (
-    <div className="segmented" role="radiogroup" aria-label="Familia">
+    <div className="segmented" role="radiogroup" aria-label={label}>
       {families.map((family) => (
         <button
           key={family.id}

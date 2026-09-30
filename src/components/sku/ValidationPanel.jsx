@@ -4,15 +4,15 @@ import { Card } from '../ui/Card'
 
 const STATE_TEXT = {
   idle: 'Todavía no se ejecutaron las validaciones.',
-  running: 'Consultando los datos reales de LS2 (mock)…',
+  running: 'Consultando los datos reales (mock)…',
   stale: 'Los datos cambiaron desde la última validación. Volvé a validar.',
 }
 
 const COUNTED = ['warn', 'error']
 
-export function ValidationPanel({ status, results, summary }) {
+export function ValidationPanel({ status, results, summary, checks = CHECKS }) {
   const conflicts = (results ?? []).flatMap((row) =>
-    CHECKS.filter((check) => COUNTED.includes(row.checks[check.id].status)).map((check) => ({
+    checks.filter((check) => COUNTED.includes(row.checks[check.id].status)).map((check) => ({
       id: `${row.key}-${check.id}`,
       sku: row.sku ?? row.key,
       check: check.label,
@@ -42,7 +42,7 @@ export function ValidationPanel({ status, results, summary }) {
       {!results && <p className={`validation-state is-${status}`}>{STATE_TEXT[status]}</p>}
 
       <div className="checks">
-        {CHECKS.map((check) => {
+        {checks.map((check) => {
           const state = aggregate(results, check.id)
           return (
             <div key={check.id} className={`check is-${state.status}`}>

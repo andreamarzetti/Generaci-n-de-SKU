@@ -9,12 +9,12 @@ const STATUS_BADGE = {
   [RULE_STATUS.UNDEFINED]: { tone: 'neutral', label: 'Pendiente de definición' },
 }
 
-export function AppliedRules({ family }) {
+export function AppliedRules({ family, label = family?.label, rules = family?.rules ?? [], generalRules = GENERAL_RULES }) {
   return (
-    <Card title="Reglas aplicadas" aside={<span className="muted small">{family.label}</span>}>
-      <RuleList rules={family.rules} />
+    <Card title="Reglas aplicadas" aside={<span className="muted small">{label}</span>}>
+      <RuleList rules={rules} />
       <h3 className="rules__subtitle">Generales</h3>
-      <RuleList rules={GENERAL_RULES} />
+      <RuleList rules={generalRules} />
     </Card>
   )
 }

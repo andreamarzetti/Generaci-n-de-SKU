@@ -71,7 +71,7 @@ export function validateRows({
   })
 }
 
-function checkLength(sku) {
+export function checkLength(sku) {
   if (!sku) return notApplicable('Sin SKU armado')
   if (sku.length > MAX_SKU_LENGTH) return error(`${sku.length} caracteres · excede ${MAX_SKU_LENGTH}`)
   if (sku.length < MIN_SKU_LENGTH) return warn(`${sku.length} caracteres · menos de ${MIN_SKU_LENGTH} (recomendado)`)
@@ -83,7 +83,7 @@ function checkFormat(row, family) {
   return family.formatPattern.test(row.sku) ? ok('Formato válido') : error(`Se espera ${family.formatHint}`)
 }
 
-function checkDuplicate(sku, { existingSkus, sessionSkus, skuCounts }) {
+export function checkDuplicate(sku, { existingSkus, sessionSkus, skuCounts }) {
   if (!sku) return notApplicable('Sin SKU armado')
   if (existingSkus.has(sku)) return error('Ya existe en los artículos de LS2')
   if (sessionSkus.has(sku)) return error('Ya confirmado en esta sesión')
