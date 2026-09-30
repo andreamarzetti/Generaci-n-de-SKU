@@ -18,8 +18,18 @@ import { useEngineGenerator } from '../hooks/useEngineGenerator'
 import { buildSteps } from './steps'
 
 /** Generación de SKU para las marcas que no son LS2, con el motor de la marca y la línea. */
-export function EngineWorkspace({ brand, engine, brandField, lineField, confirmedItems, onConfirmed }) {
-  const gen = useEngineGenerator(engine, { brandLabel: brand.label, confirmedItems, onConfirmed })
+export function EngineWorkspace({
+  brand,
+  engine,
+  brandField,
+  lineField,
+  confirmedItems,
+  onConfirmed,
+  topSlot = null,
+  loadRequest = null,
+  onLoadResult,
+}) {
+  const gen = useEngineGenerator(engine, { brandLabel: brand.label, confirmedItems, onConfirmed, loadRequest, onLoadResult })
   const { proposal, validation, actions } = gen
   const idPrefix = engine.id
 
@@ -28,6 +38,8 @@ export function EngineWorkspace({ brand, engine, brandField, lineField, confirme
       <PageHeader title="Generación de SKU" subtitle="Armado, validación y confirmación de códigos en una sola pantalla.">
         <ProcessStatus steps={buildSteps(gen.stages)} />
       </PageHeader>
+
+      {topSlot}
 
       <div className="layout">
         <div className="layout__side">

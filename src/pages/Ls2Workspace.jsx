@@ -32,8 +32,8 @@ const MODES = [
 ]
 
 /** Generación de SKU para LS2: motor propio (sin cambios en la Etapa D). */
-export function Ls2Workspace({ brandField, hidden = false }) {
-  const sku = useSkuGenerator()
+export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadRequest = null, onLoadResult }) {
+  const sku = useSkuGenerator({ loadRequest, onLoadResult })
   const { family, form, proposal, validation, actions } = sku
 
   return (
@@ -44,6 +44,8 @@ export function Ls2Workspace({ brandField, hidden = false }) {
       >
         <ProcessStatus steps={buildSteps(sku.stages)} />
       </PageHeader>
+
+      {topSlot}
 
       <div className="layout">
         <div className="layout__side">
