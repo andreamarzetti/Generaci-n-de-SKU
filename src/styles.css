@@ -166,6 +166,17 @@ p {
   align-items: start;
 }
 
+/* Columna izquierda: composición y reglas. Derecha: datos del artículo y, debajo, el resto. */
+.layout__side { grid-column: 1; grid-row: 1 / span 2; }
+.layout__main { grid-column: 2; }
+.layout__rest { grid-row: 2; }
+
+/* Reglas cerradas: el resto de las secciones ocupa todo el ancho, debajo de las dos columnas. */
+.layout--rules-closed .layout__side { grid-row: 1; align-self: stretch; }
+/* La composición se estira para que la columna llegue hasta el final de "Datos del artículo". */
+.layout--rules-closed .card--composition { flex: 1; }
+.layout--rules-closed .layout__rest { grid-column: 1 / -1; }
+
 .layout__side,
 .layout__main {
   display: flex;
@@ -292,6 +303,57 @@ p {
 .select { padding-right: 8px; cursor: pointer; }
 .input--price { min-width: 80px; width: 90px; }
 
+.combobox { position: relative; }
+.combobox__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-raised);
+}
+.combobox__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+}
+.combobox__option.is-active { background: var(--surface-muted); }
+.combobox__option.is-selected { font-weight: var(--weight-medium); }
+.combobox__tag { flex-shrink: 0; font-size: 11px; color: var(--warn); }
+.combobox__empty { padding: 8px 10px; font-size: 13px; color: var(--text-muted); }
+.combobox__input { padding-right: 40px; text-overflow: ellipsis; }
+.combobox__input:disabled { background: var(--surface-muted); cursor: not-allowed; }
+.combobox__clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.combobox__clear:hover { background: var(--surface-muted); color: var(--text); }
+
 .size-note,
 .generic-warning {
   padding: 8px 10px;
@@ -338,6 +400,48 @@ p {
 .size-chip.is-active { background: var(--brand); border-color: var(--brand); color: var(--text-inverse); }
 
 /* ── Composición ────────────────────────────────────── */
+/* Versión compacta y discreta: arriba de todo, pero sin competir con los datos del artículo. */
+.card--composition { padding: 16px 20px; background: var(--sg-verde-suave); box-shadow: none; }
+.card--composition .card__header { margin-bottom: 14px; padding-bottom: 10px; }
+.card--composition .card__title { font-size: 14px; font-weight: var(--weight-semibold); color: var(--text-muted); }
+.card--composition .length-meter { font-size: 12px; }
+.card--composition .composition { gap: 8px; }
+.card--composition .segment { min-width: 44px; height: 40px; padding: 0 10px; font-size: 19px; }
+.card--composition .segment--brand { background: var(--sg-gris-600); }
+.card--composition .segment__label { font-size: 12px; }
+.card--composition .free-digits { margin-top: 16px; }
+
+/* Tabla de SKUs: cada columna es un componente del SKU, con su cantidad de caracteres en el título. */
+.sku-parts-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.sku-parts { width: 100%; border-collapse: collapse; }
+.sku-parts th {
+  padding: 6px 10px;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+.sku-parts th sup { color: var(--warn); font-weight: var(--weight-bold); }
+.sku-parts th + th,
+.sku-parts td + td { border-left: 1px solid var(--border); }
+.sku-parts tbody tr + tr > * { border-top: 1px solid var(--border); }
+.sku-parts__cell { padding: 6px 10px; text-align: center; font-family: var(--font-mono); font-size: 14px; font-weight: var(--weight-semibold); white-space: nowrap; }
+.sku-parts__cell--brand { background: var(--sg-gris-600); color: var(--text-inverse); }
+.sku-parts__cell--code { background: var(--surface); color: var(--text); }
+.sku-parts__cell--free { background: var(--brand-accent); color: var(--on-brand-accent); }
+.sku-parts__cell--size { background: var(--surface-muted); color: var(--text); }
+.sku-parts__cell.is-empty { background: var(--surface); color: var(--border-strong); font-weight: var(--weight-regular); }
+/* Error sin resolver: toda la fila en amarillo hasta que se arme el SKU. */
+.sku-parts tr.is-unresolved .sku-parts__cell { background: var(--warn-bg); color: var(--warn); }
+.sku-parts tr.is-unresolved .sku-parts__cell.is-empty { color: var(--warn-border); }
+.sku-parts__error td { padding: 4px 10px 6px; background: var(--warn-bg); color: var(--warn); font-size: 12px; font-weight: var(--weight-medium); text-align: center; }
+.sku-parts tbody tr.sku-parts__error > * { border-top: none; }
+.sku-parts__variant { background: var(--surface) !important; color: var(--text) !important; }
+.sku-parts__count { margin-top: 8px; }
+
 .length-meter { font-size: 13px; font-weight: var(--weight-semibold); color: var(--text-muted); }
 .length-meter small { font-weight: var(--weight-regular); }
 .length-meter.is-ok { color: var(--ok); }
@@ -372,22 +476,9 @@ p {
 .free-digits { margin-top: 20px; }
 .free-digits__title { margin-bottom: 8px; font-size: 13px; font-weight: var(--weight-semibold); }
 .free-digits__title .muted { font-weight: var(--weight-regular); }
+.free-digits__select { width: 100%; font-family: var(--font-mono); }
 
-.free-digits__list { display: flex; flex-wrap: wrap; gap: 6px; }
 
-.digit-chip {
-  padding: 7px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.digit-chip:hover:not(:disabled) { border-color: var(--text); }
-.digit-chip.is-selected { background: var(--brand-accent); border-color: var(--brand-accent); color: var(--on-brand-accent); font-weight: var(--weight-semibold); }
-.digit-chip.is-used { border-style: dashed; color: var(--text-muted); text-decoration: line-through; cursor: not-allowed; }
 
 .input-issues {
   margin: 16px 0 0;
@@ -507,6 +598,11 @@ p {
 /* ── Reglas ─────────────────────────────────────────── */
 .rules { margin: 0; padding: 0; list-style: none; }
 
+/* Tarjeta cerrada: queda solo el encabezado, sin línea ni espacio debajo. */
+.card--collapsed { padding-block: 22px; }
+.card--collapsed .card__header { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+
+
 .rule {
   display: flex;
   justify-content: space-between;
@@ -573,7 +669,7 @@ p {
 .confirmation__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 16px; }
 .confirmation__table { background: var(--surface); border-radius: var(--radius-sm); margin: 0; padding: 4px 8px; color: var(--text); }
 
-/* ── Carga por lote ─────────────────────────────────── */
+/* ── Carga masiva ───────────────────────────────────── */
 .tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface-muted); border-radius: var(--radius-sm); }
 
 .tabs__tab {
@@ -618,6 +714,14 @@ p {
 .batch__code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .batch__status { grid-column: 2 / -1; }
 .batch__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* ── Carga por lote ─────────────────────────────────── */
+
+
+
+
+
+
 
 /* ── Descripciones por fila ─────────────────────────── */
 .table tr.row--main td { border-bottom: 0; padding-bottom: 2px; }
@@ -674,6 +778,10 @@ p {
 /* ── Auditoría ──────────────────────────────────────── */
 .table--compact td,
 .table--compact th { padding: 6px 8px; font-size: 12px; }
+.table--centered th,
+.table--centered td,
+.table--centered th.num { text-align: center; }
+.table--centered .input { text-align: center; }
 .audit__intro { margin-bottom: 10px; }
 .audit__findings { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; }
 
@@ -714,6 +822,10 @@ p {
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 1180px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout__side,
+  .layout__main,
+  .layout--rules-closed .layout__rest { grid-column: 1; grid-row: auto; }
+  .layout--rules-closed .card--composition { flex: initial; }
   .output { grid-template-columns: minmax(0, 1fr); }
   .checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

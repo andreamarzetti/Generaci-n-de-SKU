@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { ActionBar } from '../components/sku/ActionBar'
 import { AppliedRules } from '../components/sku/AppliedRules'
@@ -18,6 +19,11 @@ import { useSkuGenerator } from '../hooks/useSkuGenerator'
 import { FAMILY_LIST } from '../rules/families'
 import { buildSteps } from './steps'
 
+const MODES = [
+  { id: 'manual', label: 'Uno por uno' },
+  { id: 'lote', label: 'Carga masiva' },
+]
+
 const DESCRIPTION_FIELD = {
   name: 'descripcion',
   label: 'Descripción',
@@ -26,29 +32,37 @@ const DESCRIPTION_FIELD = {
   hint: 'De acá sale la descripción Tango de cada talle (editable en la tabla).',
 }
 
-const MODES = [
-  { id: 'manual', label: 'Manual' },
-  { id: 'lote', label: 'Pegar desde Excel' },
-]
-
-/** Generación de SKU para LS2: motor propio (sin cambios en la Etapa D). */
+/**
+ * Generación de SKU para LS2: motor propio. Diseño de Abril (composición y reglas a la
+ * izquierda, datos a la derecha); con las reglas cerradas, el resto pasa a todo el ancho.
+ */
 export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadRequest = null, onLoadResult }) {
   const sku = useSkuGenerator({ loadRequest, onLoadResult })
   const { family, form, proposal, validation, actions } = sku
+  const [rulesOpen, setRulesOpen] = useState(false)
 
   return (
     <main className="main" hidden={hidden}>
-      <PageHeader
-        title="Generación de SKU"
-        subtitle="Armado, validación y confirmación de códigos en una sola pantalla."
-      >
+      <PageHeader title="Generación de SKU" subtitle="Armado, validación y confirmación de códigos en una sola pantalla.">
         <ProcessStatus steps={buildSteps(sku.stages)} />
       </PageHeader>
 
       {topSlot}
 
-      <div className="layout">
+      <div className={`layout ${rulesOpen ? '' : 'layout--rules-closed'}`}>
         <div className="layout__side">
+          <SkuComposition
+            segments={sku.segments}
+            rowSegments={sku.rowSegments}
+            proposal={proposal}
+            showFreeDigits={family.scheme === 'cascos'}
+            onChooseFreeDigit={actions.chooseFreeDigit}
+          />
+
+          <AppliedRules family={family} open={rulesOpen} onToggle={() => setRulesOpen((prev) => !prev)} />
+        </div>
+
+        <div className="layout__main">
           <Card
             title="Datos del artículo"
             aside={
@@ -114,18 +128,9 @@ export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadR
               )}
             </div>
           </Card>
-
-          <AppliedRules family={family} />
         </div>
 
-        <div className="layout__main">
-          <SkuComposition
-            segments={sku.segments}
-            proposal={proposal}
-            showFreeDigits={family.scheme === 'cascos'}
-            onChooseFreeDigit={actions.chooseFreeDigit}
-          />
-
+        <div className="layout__main layout__rest">
           <SkuTable
             family={family}
             rows={proposal.rows}

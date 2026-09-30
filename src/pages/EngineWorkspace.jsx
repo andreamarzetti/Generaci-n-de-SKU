@@ -13,7 +13,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Field } from '../components/ui/Field'
 import { ENGINE_GENERAL_RULES } from '../engines/engines'
-import { ENGINE_CHECKS } from '../engines/proposal'
+import { ENGINE_CHECKS, engineRowSegments } from '../engines/proposal'
 import { useEngineGenerator } from '../hooks/useEngineGenerator'
 import { buildSteps } from './steps'
 
@@ -89,7 +89,13 @@ export function EngineWorkspace({
         </div>
 
         <div className="layout__main">
-          <SkuComposition segments={proposal.segments} proposal={proposal} showFreeDigits={false} onChooseFreeDigit={() => {}} />
+          <SkuComposition
+            segments={proposal.segments}
+            rowSegments={engineRowSegments(proposal)}
+            proposal={proposal}
+            showFreeDigits={false}
+            onChooseFreeDigit={() => {}}
+          />
 
           <EngineSkuTable
             rows={proposal.rows}

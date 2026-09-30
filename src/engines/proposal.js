@@ -78,6 +78,14 @@ function countBy(values) {
   }, {})
 }
 
+/** Segmentos de cada SKU (uno por talle), para la tabla de composición. */
+export function engineRowSegments(proposal) {
+  return proposal.rows.map((row) => ({
+    row,
+    segments: proposal.segments.map((segment) => (segment.id === 'talle' ? { ...segment, value: row.size.code } : segment)),
+  }))
+}
+
 export function validateEngineRows({
   engine,
   proposal,

@@ -7,6 +7,9 @@ const LONG_SKUS = auditLongSkus()
 const ANOMALIES = auditStructureAnomalies()
 const LEGACY_SIZES = auditLegacySizes()
 
+// Quién hizo el cambio. Fijo por ahora, hasta tener el usuario logueado.
+const CHANGED_BY = 'NOMBRE'
+
 /** Auditoría informativa de los datos reales. No modifica nada. */
 export function AuditCard() {
   return (
@@ -14,13 +17,14 @@ export function AuditCard() {
       <h3 className="rules__subtitle">SKUs de LS2 de más de 15 caracteres ({LONG_SKUS.length})</h3>
       <p className="muted small audit__intro">Corrección sugerida según la tabla oficial de talles:</p>
       <div className="table-wrap">
-        <table className="table table--compact">
+        <table className="table table--compact table--centered">
           <thead>
             <tr>
               <th>SKU actual</th>
               <th className="num">Largo</th>
               <th>Sugerido</th>
               <th className="num">Largo</th>
+              <th>Cambio hecho por</th>
             </tr>
           </thead>
           <tbody>
@@ -33,6 +37,7 @@ export function AuditCard() {
                   {item.suggestedExists && <span className="small text-error"> (ya existe)</span>}
                 </td>
                 <td className="num mono">{item.suggestedLength ?? '—'}</td>
+                <td>{CHANGED_BY}</td>
               </tr>
             ))}
           </tbody>

@@ -71,6 +71,7 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
     [family, form, batchRows, rowData, session, freeDigitChoice],
   )
   const segments = proposalSegments(family, proposal)
+  const rowSegments = proposal.rows.map((row) => ({ row, segments: proposalSegments(family, proposal, row) }))
   const classification = buildClassification(family, generico)
 
   const signature = JSON.stringify([
@@ -249,6 +250,7 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
     classification,
     proposal,
     segments,
+    rowSegments,
     examples: EXAMPLES[familyId] ?? [],
     validation: {
       status: isStale ? 'stale' : validation.status,

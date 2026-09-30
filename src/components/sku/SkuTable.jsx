@@ -23,7 +23,7 @@ export function SkuTable({ family, rows, rowData, results, onRowChange, validati
         <p className="empty">Completá los datos del artículo para ver la propuesta.</p>
       ) : (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table table--centered">
             <thead>
               <tr>
                 <th>Talle</th>
