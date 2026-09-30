@@ -5,14 +5,26 @@ import { normalizeSize, sortBySize, splitFootwearCode, splitSupplierCodes } from
 
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
 const normalizeCode = (value = '') => String(value).toUpperCase().replace(/\s+/g, '')
+/** Varios códigos en un mismo campo: cada ";" (o salto de línea) separa uno de otro. */
+export const splitCodes = (value = '') => String(value).split(/[;\n]/).map(normalizeCode).filter(Boolean)
+
+/** Clave de fila única aunque el mismo código se repita (el duplicado lo marca la validación). */
+function uniqueKeys(codes) {
+  const seen = {}
+  return codes.map((code) => {
+    seen[code] = (seen[code] ?? 0) + 1
+    return seen[code] > 1 ? `${code}#${seen[code]}` : code
+  })
+}
+
 const barcodePrefix = (barcode) => {
   const digits = onlyDigits(barcode)
   return digits.length >= BARCODE_PREFIX_LENGTH ? digits.slice(0, BARCODE_PREFIX_LENGTH) : null
 }
 
 /**
- * Arma la propuesta de SKU a partir de la carga manual (`form`) o de un lote
- * pegado desde Excel (`batchRows`). Es puro: las fuentes de dígitos usados se inyectan.
+ * Arma la propuesta de SKU a partir de la carga uno por uno (`form`) o de la
+ * carga masiva (`batchRows`). Es puro: las fuentes de dígitos usados se inyectan.
  *
  * Devuelve:
  *  - segments: bloques que componen el SKU (del primer código), para visualizarlos
@@ -66,31 +78,26 @@ function buildFromForm(family, form, rowData) {
     }
     case 'talleSufijo':
     case 'calzado': {
-      const lines = String(form.codigos ?? '').split('\n').map(normalizeCode).filter(Boolean)
+      const lines = splitCodes(form.codigos)
       const parts = family.scheme === 'calzado' ? lines.map(splitFootwearCode) : splitSupplierCodes(lines)
-      const seen = {}
-      const rows = lines.map((line, index) => {
-        seen[line] = (seen[line] ?? 0) + 1
-        return supplierRow({
-          key: seen[line] > 1 ? `${line}#${seen[line]}` : line,
-          source: line,
-          descripcion,
-          ...parts[index],
-        })
-      })
+      const keys = uniqueKeys(lines)
+      const rows = lines.map((line, index) =>
+        supplierRow({ key: keys[index], source: line, descripcion, ...parts[index] }),
+      )
       return { rows, issues: lines.length === 0 ? ['Ingresá al menos un código del proveedor.'] : [] }
     }
     default: {
-      const code = normalizeCode(form.codigo)
+      const codes = splitCodes(form.codigo)
+      const keys = uniqueKeys(codes)
       return {
-        rows: code ? [singleRow(family, { key: 'unico', code, descripcion })] : [],
-        issues: code ? [] : ['Ingresá el código del proveedor.'],
+        rows: codes.map((code, index) => singleRow(family, { key: keys[index], code, descripcion })),
+        issues: codes.length ? [] : ['Ingresá el código del proveedor.'],
       }
     }
   }
 }
 
-// ── Carga por lote ────────────────────────────────────────
+// ── Carga masiva ──────────────────────────────────────────
 
 function buildFromBatch(family, batchRows, rowData) {
   const rows = batchRows.map((row) => {
@@ -197,9 +204,8 @@ function withDescriptions(row, rowData) {
   }
 }
 
-/** Segmentos del SKU para mostrar su composición (a partir del primer código). */
-export function proposalSegments(family, proposal) {
-  const first = proposal.rows[0]
+/** Segmentos del SKU de una fila para mostrar su composición (por defecto, la primera). */
+export function proposalSegments(family, proposal, first = proposal.rows[0]) {
   const size = first?.size?.recognized ? `.${first.size.value}` : ''
   if (family.scheme === 'cascos') {
     const group = proposal.groups?.find((item) => item.key === first?.groupKey)

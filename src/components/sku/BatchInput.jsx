@@ -2,7 +2,7 @@ import { BATCH_COLUMNS } from '../../rules/batch'
 import { Button } from '../ui/Button'
 import { Field } from '../ui/Field'
 
-/** Área para pegar un bloque copiado de Excel (columnas separadas por tabulación). */
+/** Carga masiva: área para pegar la tabla que manda LS2 por mail (o copiada de Excel). */
 export function BatchInput({ id, family, text, preview, loaded, onTextChange, onApply, onDiscard }) {
   const withErrors = preview.rows.filter((row) => row.errors.length > 0).length
   const codeHint =
@@ -13,9 +13,9 @@ export function BatchInput({ id, family, text, preview, loaded, onTextChange, on
   return (
     <div className="batch">
       <Field
-        label="Bloque copiado de Excel"
+        label="Tabla copiada del mail o de Excel"
         htmlFor={id}
-        hint={`Columnas: ${BATCH_COLUMNS.join(' · ')}. ${codeHint} El encabezado se detecta solo.`}
+        hint={`Columnas: ${BATCH_COLUMNS.join(' · ')}. ${codeHint} Si pegás el encabezado, las columnas pueden venir en cualquier orden. Se aceptan tabulaciones, ";", "|" o varios espacios entre columnas.`}
         counter={<span className="field__counter">{preview.rows.length} filas</span>}
       >
         <textarea
@@ -23,7 +23,7 @@ export function BatchInput({ id, family, text, preview, loaded, onTextChange, on
           className="input input--mono textarea batch__text"
           rows={6}
           value={text}
-          placeholder={'Pegá acá las filas copiadas de Excel\nFF806 FUSION TECK LIGHT GRAY RED GLOSS\t9806002025011\t6937449162997\tS'}
+          placeholder={'Pegá acá la tabla del mail, una fila por artículo\nDescripción; Código de barras; EAN; Talle\nFF806 FUSION TECK LIGHT GRAY RED GLOSS; 9806002025011; 6937449162997; S'}
           onChange={(e) => onTextChange(e.target.value)}
         />
       </Field>

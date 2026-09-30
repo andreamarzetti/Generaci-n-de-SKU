@@ -1,3 +1,4 @@
+import { splitCodes } from '../../rules/buildProposal'
 import { normalizeSize } from '../../rules/sizes'
 import { Field } from '../ui/Field'
 
@@ -24,9 +25,14 @@ function TextInput({ id, field, value, onChange }) {
   )
 }
 
+const codesCounter = (value) => {
+  const count = splitCodes(value).length
+  return <span className="field__counter">{count} {count === 1 ? 'código' : 'códigos'}</span>
+}
+
 function CodeInput({ id, field, value, onChange }) {
   return (
-    <Field label={field.label} htmlFor={id} hint={field.hint}>
+    <Field label={field.label} htmlFor={id} hint={field.hint} counter={codesCounter(value)}>
       <input
         id={id}
         className="input input--mono"
@@ -71,18 +77,12 @@ function SizesInput({ id, field, value, onChange }) {
 }
 
 function LinesInput({ id, field, value, onChange }) {
-  const count = value.split('\n').filter((line) => line.trim()).length
   return (
-    <Field
-      label={field.label}
-      htmlFor={id}
-      hint={field.hint}
-      counter={<span className="field__counter">{count} códigos</span>}
-    >
+    <Field label={field.label} htmlFor={id} hint={field.hint} counter={codesCounter(value)}>
       <textarea
         id={id}
         className="input input--mono textarea"
-        rows={6}
+        rows={4}
         value={value}
         placeholder={field.placeholder}
         onChange={(e) => onChange(e.target.value.toUpperCase())}

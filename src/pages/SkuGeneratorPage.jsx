@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { ActionBar } from '../components/sku/ActionBar'
 import { AppliedRules } from '../components/sku/AppliedRules'
@@ -17,6 +18,11 @@ import { Card } from '../components/ui/Card'
 import { useSkuGenerator } from '../hooks/useSkuGenerator'
 import { FAMILY_LIST } from '../rules/families'
 
+const MODES = [
+  { id: 'manual', label: 'Uno por uno' },
+  { id: 'lote', label: 'Carga masiva' },
+]
+
 const DESCRIPTION_FIELD = {
   name: 'descripcion',
   label: 'Descripción',
@@ -25,14 +31,11 @@ const DESCRIPTION_FIELD = {
   hint: 'De acá sale la descripción Tango de cada talle (editable en la tabla).',
 }
 
-const MODES = [
-  { id: 'manual', label: 'Manual' },
-  { id: 'lote', label: 'Pegar desde Excel' },
-]
-
 export function SkuGeneratorPage() {
   const sku = useSkuGenerator()
   const { family, form, proposal, validation, actions } = sku
+  // Con las reglas cerradas, las secciones debajo de "Datos del artículo" pasan a todo el ancho.
+  const [rulesOpen, setRulesOpen] = useState(true)
 
   return (
     <main className="main">
@@ -43,8 +46,20 @@ export function SkuGeneratorPage() {
         <ProcessStatus steps={buildSteps(sku.stages)} />
       </PageHeader>
 
-      <div className="layout">
+      <div className={`layout ${rulesOpen ? '' : 'layout--rules-closed'}`}>
         <div className="layout__side">
+          <SkuComposition
+            segments={sku.segments}
+            rowSegments={sku.rowSegments}
+            proposal={proposal}
+            showFreeDigits={family.scheme === 'cascos'}
+            onChooseFreeDigit={actions.chooseFreeDigit}
+          />
+
+          <AppliedRules family={family} open={rulesOpen} onToggle={() => setRulesOpen((prev) => !prev)} />
+        </div>
+
+        <div className="layout__main">
           <Card
             title="Datos del artículo"
             aside={
@@ -109,17 +124,9 @@ export function SkuGeneratorPage() {
               )}
             </div>
           </Card>
-
-          <AppliedRules family={family} />
         </div>
 
-        <div className="layout__main">
-          <SkuComposition
-            segments={sku.segments}
-            proposal={proposal}
-            showFreeDigits={family.scheme === 'cascos'}
-            onChooseFreeDigit={actions.chooseFreeDigit}
-          />
+        <div className="layout__main layout__rest">
 
           <SkuTable
             family={family}

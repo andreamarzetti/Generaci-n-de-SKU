@@ -259,6 +259,51 @@ describe('carga por lote', () => {
     const { rows } = parseBatch('FF806\t9806002025011\t6937449162997\tS\tCUALQUIERA', cascos)
     expect(rows[0].errors).toEqual([])
   })
+
+  it('lee la tabla pegada de un mail separada por ";" o "|"', () => {
+    const conPuntoYComa = parseBatch('FF806 FUSION TECK; 9806002025011; 6937449162997; S', cascos)
+    const conBarras = parseBatch('| FF806 FUSION TECK | 9806002025011 | 6937449162997 | S |', cascos)
+    for (const { rows } of [conPuntoYComa, conBarras]) {
+      expect(rows[0]).toMatchObject({ descripcion: 'FF806 FUSION TECK', barras: '9806002025011', ean: '6937449162997', errors: [] })
+    }
+  })
+
+  it('lee columnas separadas por varios espacios e ignora las líneas de adorno', () => {
+    const text = 'Descripción    Código de barras    EAN    Talle\n-----------------\nFF806 FUSION TECK    9806002025011    6937449162997    M'
+    const { rows, hasHeader } = parseBatch(text, cascos)
+    expect(hasHeader).toBe(true)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ barras: '9806002025011', ean: '6937449162997', size: { value: 'M' }, errors: [] })
+  })
+
+  it('con encabezado, las columnas pueden venir en otro orden', () => {
+    const text = 'Talle\tEAN\tDescripción\tCódigo de barras\nL\t6937449162997\tFF806 FUSION\t9806002025011'
+    const { rows } = parseBatch(text, cascos)
+    expect(rows[0]).toMatchObject({ descripcion: 'FF806 FUSION', barras: '9806002025011', ean: '6937449162997', errors: [] })
+    expect(rows[0].size).toMatchObject({ value: 'L' })
+  })
+})
+
+describe('varios códigos separados por ";"', () => {
+  it('indumentaria: cada ";" es un código y un SKU', () => {
+    const proposal = buildProposal(FAMILIES.indumentaria, { form: { codigos: '64240W0112S; 64240W0112M;64240W0112L;' } })
+    expect(proposal.rows.map((row) => row.sku)).toEqual(['LS2642400112.S', 'LS2642400112.M', 'LS2642400112.L'])
+  })
+
+  it('también acepta un código por línea', () => {
+    const proposal = buildProposal(FAMILIES.indumentaria, { form: { codigos: '64240W0112S\n64240W0112M' } })
+    expect(proposal.rows).toHaveLength(2)
+  })
+
+  it('repuestos: varios códigos en el mismo campo', () => {
+    const proposal = buildProposal(FAMILIES.repuestos, { form: { codigo: '800562VIO01;800562VIO02' } })
+    expect(proposal.rows.map((row) => row.sku)).toEqual(['LS2800562VIO01', 'LS2800562VIO02'])
+  })
+
+  it('un código repetido genera claves de fila distintas', () => {
+    const proposal = buildProposal(FAMILIES.repuestos, { form: { codigo: '800562VIO01;800562VIO01' } })
+    expect(proposal.rows.map((row) => row.key)).toEqual(['800562VIO01', '800562VIO01#2'])
+  })
 })
 
 describe('salida', () => {

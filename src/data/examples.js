@@ -84,7 +84,7 @@ export const EXAMPLES = {
         const [article] = articlesBySupplierPrefix('800562VIO01')
         return {
           form: { descripcion: article?.descripcion ?? '', generico: '', codigo: article?.codigoProveedor ?? '' },
-          rowData: { unico: { ean: article?.ean ?? '' } },
+          rowData: article ? { [article.codigoProveedor]: { ean: article.ean ?? '' } } : {},
         }
       },
     },

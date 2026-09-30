@@ -24,8 +24,8 @@ const SUPPLIER_CODES_FIELD = {
   name: 'codigos',
   label: 'Códigos del proveedor',
   type: 'lines',
-  placeholder: 'Un código por línea, con el talle al final\n64240W0112S\n64240W0112M',
-  hint: 'Se quitan las letras intermedias y el talle final pasa después del punto.',
+  placeholder: 'Separá los códigos con ";", con el talle al final\n64240W0112S; 64240W0112M; 64240W0112L',
+  hint: 'Cada ";" separa un código. Se quitan las letras intermedias y el talle final pasa después del punto.',
 }
 
 const SIZE_SUFFIX_RULES = [
@@ -63,7 +63,15 @@ function singleSizeFamily(id, label, familia) {
     familia,
     scheme: 'talleUnico',
     hasSize: false,
-    fields: [{ name: 'codigo', label: 'Código del proveedor', type: 'code', placeholder: 'Código del artículo' }],
+    fields: [
+      {
+        name: 'codigo',
+        label: 'Códigos del proveedor',
+        type: 'code',
+        placeholder: 'Ej.: 8105057; 8105058',
+        hint: 'Para cargar varios, separalos con ";".',
+      },
+    ],
     formatPattern: /^LS2[A-Z0-9]+\.TU$/,
     formatHint: 'LS2 + código del proveedor + .TU',
     rules: [
@@ -118,8 +126,8 @@ export const FAMILIES = {
     fields: [
       {
         ...SUPPLIER_CODES_FIELD,
-        placeholder: 'Un código por línea, con el talle al final\n71080C011240\n71080C011241',
-        hint: 'Los 2 dígitos finales son el talle (.40, .41…).',
+        placeholder: 'Separá los códigos con ";", con el talle al final\n71080C011240; 71080C011241',
+        hint: 'Cada ";" separa un código. Los 2 dígitos finales son el talle (.40, .41…).',
       },
     ],
     formatPattern: /^LS2\d+\.\d{2}$/,
@@ -143,7 +151,15 @@ export const FAMILIES = {
     familia: 'REPUESTOS',
     scheme: 'codigoLibre',
     hasSize: false,
-    fields: [{ name: 'codigo', label: 'Código del proveedor', type: 'code', placeholder: 'Ej.: 800562VIO01' }],
+    fields: [
+      {
+        name: 'codigo',
+        label: 'Códigos del proveedor',
+        type: 'code',
+        placeholder: 'Ej.: 800562VIO01; 800562VIO02',
+        hint: 'Para cargar varios, separalos con ";".',
+      },
+    ],
     formatPattern: /^LS2[A-Z0-9]+$/,
     formatHint: 'LS2 + código del proveedor, sin punto ni talle',
     rules: [

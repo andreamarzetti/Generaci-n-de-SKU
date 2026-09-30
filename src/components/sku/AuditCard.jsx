@@ -5,6 +5,9 @@ import { Card } from '../ui/Card'
 
 const LONG_SKUS = auditLongSkus()
 
+// Quién hizo el cambio. Fijo por ahora, hasta tener el usuario logueado.
+const CHANGED_BY = 'NOMBRE'
+
 /** Auditoría informativa de los datos reales. No modifica nada. */
 export function AuditCard() {
   return (
@@ -13,13 +16,14 @@ export function AuditCard() {
         {LONG_SKUS.length} SKUs reales superan los 15 caracteres. Corrección sugerida según la tabla oficial de talles:
       </p>
       <div className="table-wrap">
-        <table className="table table--compact">
+        <table className="table table--compact table--centered">
           <thead>
             <tr>
               <th>SKU actual</th>
               <th className="num">Largo</th>
               <th>Sugerido</th>
               <th className="num">Largo</th>
+              <th>Cambio hecho por</th>
             </tr>
           </thead>
           <tbody>
@@ -32,6 +36,7 @@ export function AuditCard() {
                   {item.suggestedExists && <span className="small text-error"> (ya existe)</span>}
                 </td>
                 <td className="num mono">{item.suggestedLength ?? '—'}</td>
+                <td>{CHANGED_BY}</td>
               </tr>
             ))}
           </tbody>
