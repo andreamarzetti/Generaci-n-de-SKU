@@ -3,6 +3,7 @@ import { ALL_EXISTING_SKUS } from '../data/realData'
 import { nextArticleCode, usedArticleCodes } from '../engines/correlative'
 import { brandHasGenericos, genericosFor, prefixBeforeArticle } from '../engines/engines'
 import { buildEngineProposal, validateEngineRows } from '../engines/proposal'
+import { useExternalLoad } from './useExternalLoad'
 
 const LATENCY_MS = 650
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
@@ -20,7 +21,7 @@ function summarize(results) {
  * artículo (de la tabla o correlativo nuevo), talles, validación mock y confirmación.
  * `confirmedItems` se comparte entre marcas para el control de duplicados de la sesión.
  */
-export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfirmed }) {
+export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfirmed, loadRequest = null, onLoadResult }) {
   const [selections, setSelections] = useState({})
   const [articleMode, setArticleMode] = useState('tabla')
   const [articleLine, setArticleLine] = useState('')
@@ -127,6 +128,30 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
     })
     touch()
   }
+
+  // Carga desde "Pegar solicitud": lo que no se puede deducir del mail queda para elegir.
+  const hasData =
+    Object.values(selections).some(Boolean) || sizes.length > 0 || Boolean(descripcion) || Boolean(genericoKey) || Object.keys(rowData).length > 0
+
+  useExternalLoad(loadRequest, {
+    applies: (request) => request.target === 'engine' && request.engineId === engine.id,
+    hasData,
+    apply: (payload) => {
+      setSelections(payload.selections)
+      setArticleMode('tabla')
+      setArticleLine('')
+      setArticleManual(null)
+      setSizes(payload.sizes)
+      setDescripcion(payload.descripcion.toUpperCase())
+      setGenericoKey(payload.genericoKey)
+      setRowData(payload.rowData)
+      setLastConfirmation(null)
+      requestId.current += 1
+      setValidation({ status: 'idle' })
+      setWarningsAcknowledged(false)
+    },
+    onLoadResult,
+  })
 
   const clearForm = () => {
     setSelections({})

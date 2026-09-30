@@ -6,6 +6,7 @@ import { buildProposal, proposalSegments } from '../rules/buildProposal'
 import { buildClassification } from '../rules/classification'
 import { emptyForm, FAMILIES, FAMILY_LIST } from '../rules/families'
 import { validateProposal } from '../services/mockSkuService'
+import { useExternalLoad } from './useExternalLoad'
 
 const initialForms = () => Object.fromEntries(FAMILY_LIST.map((family) => [family.id, emptyForm(family)]))
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
@@ -22,7 +23,7 @@ function summarize(results) {
  * Estado completo de la pantalla de generación: familia, carga manual o por lote,
  * propuesta armada, validación (mock con datos reales) y confirmación.
  */
-export function useSkuGenerator() {
+export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   const [familyId, setFamilyId] = useState('cascos')
   const [forms, setForms] = useState(initialForms)
   const [modeByFamily, setModeByFamily] = useState({})
@@ -173,6 +174,28 @@ export function useSkuGenerator() {
     setLastConfirmation(null)
     resetValidation()
   }
+
+  // Carga desde "Pegar solicitud": familia, datos del artículo y filas por talle.
+  const formHasData = (familyKey) => {
+    const current = forms[familyKey]
+    const filled = Object.values(current).some((value) => (Array.isArray(value) ? value.length > 0 : Boolean(value)))
+    return filled || Object.keys(rowDataByFamily[familyKey] ?? {}).length > 0 || Boolean(batchByFamily[familyKey])
+  }
+
+  useExternalLoad(loadRequest, {
+    applies: (request) => request.target === 'ls2',
+    hasData: loadRequest?.target === 'ls2' ? formHasData(loadRequest.payload.familyId) : false,
+    apply: ({ familyId: targetFamily, form: loadedForm, rowData: loadedRows }) => {
+      setFamilyId(targetFamily)
+      setForms((prev) => ({ ...prev, [targetFamily]: { ...emptyForm(FAMILIES[targetFamily]), ...loadedForm } }))
+      setModeByFamily((prev) => ({ ...prev, [targetFamily]: 'manual' }))
+      setBatchByFamily((prev) => ({ ...prev, [targetFamily]: null }))
+      setRowDataByFamily((prev) => ({ ...prev, [targetFamily]: loadedRows }))
+      setLastConfirmation(null)
+      resetValidation()
+    },
+    onLoadResult,
+  })
 
   const clearForm = () => {
     setForms((prev) => ({ ...prev, [familyId]: emptyForm(family) }))
