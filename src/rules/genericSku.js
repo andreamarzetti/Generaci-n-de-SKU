@@ -28,13 +28,23 @@ export function genericSkus(rows, describe) {
   return [...found.values()]
 }
 
+// Los artículos reales no listan los genéricos, solo los SKU de cada talle: el genérico de una variante
+// existe si ya hay algún SKU con esa base (UBX1031322I7.S → UBX1031322I7). Se calcula una vez por conjunto.
+const basesCache = new WeakMap()
+function basesOf(skus) {
+  if (!basesCache.has(skus)) basesCache.set(skus, new Set([...skus].map(genericSkuOf).filter(Boolean)))
+  return basesCache.get(skus)
+}
+
 /**
- * Si el genérico ya existe (artículos reales o confirmados en la sesión) se avisa: no es un error,
- * porque al sumar talles a una variante existente el genérico se reutiliza.
+ * Si el genérico ya existe (artículos reales, aunque sea por sus talles, o confirmados en la sesión) se avisa:
+ * no es un error, porque al sumar talles a una variante existente el genérico se reutiliza.
  */
-export function checkGenericExists(sku, { existingSkus, sessionSkus }) {
+export const genericExists = (generic, { existingSkus, sessionSkus }) =>
+  existingSkus.has(generic) || sessionSkus.has(generic) || basesOf(existingSkus).has(generic) || basesOf(sessionSkus).has(generic)
+
+export function checkGenericExists(sku, sources) {
   const generic = genericSkuOf(sku)
   if (!generic) return null
-  if (existingSkus.has(generic) || sessionSkus.has(generic)) return { status: 'warn', message: `El SKU genérico ${generic} ya existe: se reutiliza` }
-  return null
+  return genericExists(generic, sources) ? { status: 'warn', message: `El SKU genérico ${generic} ya existe: se reutiliza` } : null
 }

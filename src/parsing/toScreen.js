@@ -1,10 +1,11 @@
 // Adaptador entre la interpretación y la pantalla: traduce los datos (ya revisados
 // por el usuario) al estado de LS2 o del motor de la marca. No completa nada que
 // no venga de la interpretación.
-import { ALL_GENERICOS, GENERICOS, REGLA_PRODUCTO } from '../data/realData'
+import { ALL_GENERICOS, GENERICOS, OFFICIAL_SIZES, REGLA_PRODUCTO } from '../data/realData'
 import { BRANDS } from '../engines/engines'
 import { FAMILY_LIST } from '../rules/families'
-import { applyChoices, decomposeDescription, selectionsFromParts, supportsDescription } from './components'
+import { variantsFromDescriptions } from '../rules/variantPlan'
+import { applyChoices, choicesFor, decomposeDescription, REQUIRED_PARTS, selectionsFromParts, supportsDescription } from './components'
 
 /** Línea del motor según la familia (MAC y GUD tienen cascos y producto). */
 function lineFor(brand, familia) {
@@ -21,12 +22,77 @@ function genericKey(list, codigo) {
 }
 
 /**
+ * Varias variantes marcadas: se cargan juntas en la carga masiva, con una curva de talles para todas
+ * (después se pueden cambiar los talles de una variante en particular).
+ */
+function toMultiLoad(draft, brand, selected) {
+  const { familia, generico } = draft.fields
+  const curveValues = draft.curve ?? draft.rows.map((row) => row.talle.value).filter(Boolean)
+  const variants = variantsFromDescriptions(selected)
+
+  if (brand.id === 'LS2') {
+    if (familia.value !== 'CASCOS')
+      return { ok: false, reason: 'En LS2, varias variantes juntas se cargan solo para cascos. Marcá una por vez para otras familias.' }
+    const curve = OFFICIAL_SIZES.filter((size) => size !== 'TU' && curveValues.includes(size))
+    const form = { descripcion: '', generico: generico.value ? genericKey(GENERICOS, generico.value) : '' }
+    return {
+      ok: true,
+      brandId: 'LS2',
+      lineId: null,
+      target: 'ls2',
+      payload: { familyId: 'cascos', form, rowData: {}, plan: { variants, curve } },
+    }
+  }
+
+  const line = lineFor(brand, familia.value)
+  if (!line) return { ok: false, reason: `Completá la familia para elegir la línea de ${brand.label}.` }
+  if (line.id !== 'cascos' || !supportsDescription(brand.id)) {
+    return { ok: false, reason: `Para ${brand.label} todavía no se pueden cargar varias variantes juntas: marcá una por vez.` }
+  }
+
+  // Cada variante tiene que tener sus cuatro partes resueltas (existentes, deducidas o elegidas).
+  const resolved = []
+  for (const variant of variants) {
+    const parts = applyChoices(decomposeDescription(brand.id, variant.descripcion).parts, choicesFor(draft, variant.descripcion))
+    const selections = selectionsFromParts(parts)
+    const pending = REQUIRED_PARTS.filter((id) => !selections[id])
+    if (pending.length) {
+      const labels = pending.map((id) => parts.find((part) => part.id === id)?.label ?? id).join(', ')
+      return { ok: false, reason: `Falta resolver ${labels.toLowerCase()} en «${variant.descripcion}»: elegí o creá lo que no exista.` }
+    }
+    resolved.push(selections)
+  }
+
+  const engine = line.engine
+  const sizeCodes = new Set(engine.sizes.map((size) => size.code))
+  const curve = curveValues.map((value) => `.${value}`).filter((code) => sizeCodes.has(code))
+  const brandGenericos = ALL_GENERICOS.filter((item) => item.marca === engine.genericBrand)
+  return {
+    ok: true,
+    brandId: brand.id,
+    lineId: line.id,
+    target: 'engine',
+    engineId: engine.id,
+    payload: {
+      selections: {},
+      sizes: [],
+      descripcion: '',
+      genericoKey: generico.value ? genericKey(brandGenericos, generico.value) : '',
+      rowData: {},
+      batch: { variants: variants.map((variant, index) => ({ ...variant, selections: resolved[index] })), curve },
+    },
+  }
+}
+
+/**
  * @returns {{ ok: true, brandId, lineId, target, payload } | { ok: false, reason }}
  */
 export function toScreenLoad(draft) {
   const { marca, familia, generico, descripcion } = draft.fields
   const brand = BRANDS.find((item) => item.id === marca.value)
   if (!brand) return { ok: false, reason: 'Completá la marca para saber dónde cargar los datos.' }
+
+  if ((draft.selected ?? []).length > 1) return toMultiLoad(draft, brand, draft.selected)
 
   const rows = draft.rows.filter((row) => row.talle.value)
   const text = descripcion.value ?? ''
@@ -43,9 +109,7 @@ export function toScreenLoad(draft) {
     } else if (family.scheme === 'talleSufijo' || family.scheme === 'calzado') {
       const withCode = rows.filter((row) => row.codigoProveedor.value)
       form.codigos = withCode.map((row) => row.codigoProveedor.value).join('\n')
-      rowData = Object.fromEntries(
-        withCode.map((row) => [row.codigoProveedor.value, { barras: row.barras.value, ean: row.ean.value }]),
-      )
+      rowData = Object.fromEntries(withCode.map((row) => [row.codigoProveedor.value, { barras: row.barras.value, ean: row.ean.value }]))
     } else {
       const first = draft.rows[0]
       form.codigo = first?.codigoProveedor.value ?? ''
@@ -69,7 +133,7 @@ export function toScreenLoad(draft) {
   const brandGenericos = ALL_GENERICOS.filter((item) => item.marca === engine.genericBrand)
   // Cascos: la descripción se descompone en tipología, calota, gráfica y color, y se cargan los que existen.
   if (line.id === 'cascos' && supportsDescription(brand.id) && text) {
-    Object.assign(selections, selectionsFromParts(applyChoices(decomposeDescription(brand.id, text).parts, draft.choices)))
+    Object.assign(selections, selectionsFromParts(applyChoices(decomposeDescription(brand.id, text).parts, choicesFor(draft, text))))
   }
 
   return {

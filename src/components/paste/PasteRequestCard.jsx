@@ -44,11 +44,11 @@ export function PasteRequestCard({ state, actions }) {
             onChange={(e) => actions.setText(e.target.value)}
           />
           <div className="paste__actions">
-            <Button variant="dark" onClick={actions.interpret} disabled={!text.trim()}>
+            <Button variant="dark" icon="sparkles" onClick={actions.interpret} disabled={!text.trim()}>
               Interpretar
             </Button>
             {(text || draft) && (
-              <Button size="sm" variant="ghost" onClick={actions.clear}>
+              <Button size="sm" variant="danger" icon="eraser" onClick={actions.clear}>
                 Limpiar
               </Button>
             )}
@@ -73,10 +73,10 @@ export function PasteRequestCard({ state, actions }) {
                 Ya hay datos cargados en {pendingConfirm}. ¿Reemplazarlos por lo interpretado?
               </p>
               <div className="paste__actions">
-                <Button variant="dark" size="sm" onClick={actions.confirmReplace}>
+                <Button variant="warning" size="sm" icon="refresh" onClick={actions.confirmReplace}>
                   Reemplazar
                 </Button>
-                <Button size="sm" onClick={actions.cancelReplace}>
+                <Button size="sm" icon="close" onClick={actions.cancelReplace}>
                   Cancelar
                 </Button>
               </div>

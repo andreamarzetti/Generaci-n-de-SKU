@@ -42,11 +42,11 @@ export function BatchInput({ id, family, text, preview, loaded, onTextChange, on
       )}
 
       <div className="batch__actions">
-        <Button size="sm" variant="dark" disabled={preview.rows.length === 0} onClick={onApply}>
+        <Button size="sm" variant="success" icon="check" disabled={preview.rows.length === 0} onClick={onApply}>
           Usar {preview.rows.length} {preview.rows.length === 1 ? 'fila' : 'filas'}
         </Button>
         {loaded && (
-          <Button size="sm" variant="ghost" onClick={onDiscard}>
+          <Button size="sm" variant="danger" icon="trash" onClick={onDiscard}>
             Descartar lote
           </Button>
         )}

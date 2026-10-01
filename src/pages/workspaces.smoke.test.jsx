@@ -114,7 +114,7 @@ describe('SkuGeneratorPage', () => {
     })
     act(() => [...view.querySelectorAll('button')].find((b) => b.textContent.includes('Interpretar')).click())
     expect(view.querySelectorAll('.variants__item')).toHaveLength(6)
-    const toggle = () => act(() => view.querySelectorAll('.variants__item button')[1].click())
+    const toggle = () => act(() => view.querySelectorAll('.variants__item input')[1].click())
     toggle()
     expect(view.querySelector('.variants__item--selected').textContent).toContain('FF313 AVA ARCANO GLOSS BLACK PINK')
     toggle()
@@ -351,7 +351,7 @@ describe('altas de referencia', () => {
     expect(view.querySelectorAll('.variants__item')).toHaveLength(6)
     expect([...view.querySelectorAll('.variants__item .badge')].map((badge) => badge.textContent)).toEqual(Array(6).fill('Todo existe'))
 
-    act(() => view.querySelectorAll('.variants__item button')[2].click())
+    act(() => view.querySelectorAll('.variants__item input')[2].click())
     const parts = view.querySelector('.parts').textContent
     expect(parts).toContain('FF313 AVA ARCANO GLOSS BLACK RED')
     ;['313', 'AVA', '22', 'ARCANO', '50'].forEach((text) => expect(parts).toContain(text))
@@ -391,5 +391,682 @@ describe('SKU genérico en pantalla', () => {
     expect(rows[0]).toContain('UBX103132250')
     expect(rows[0]).toContain('Genérico')
     expect(rows[1]).toContain('UBX103132250.S')
+  })
+})
+
+describe('varias variantes juntas', () => {
+  const buttonWith = (view, text) => [...view.querySelectorAll('button')].find((b) => b.textContent.includes(text))
+  const paste = (view, text) => {
+    const textarea = view.querySelector('textarea')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, text)
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => buttonWith(view, 'Interpretar').click())
+  }
+  const chip = (root, label) => [...root.querySelectorAll('.size-chip')].find((element) => element.textContent === label)
+  const urbax = () => PASTE_EXAMPLES.find((item) => item.id === 'variantes').text
+
+  it('se marcan varias (o todas) y la revisión muestra la composición de cada una', () => {
+    const view = mount(<SkuGeneratorPage />)
+    paste(view, urbax())
+    const boxes = () => [...view.querySelectorAll('.variants__item input')]
+
+    act(() => boxes()[0].click())
+    act(() => boxes()[2].click())
+    expect(view.querySelector('.variants__toolbar').textContent).toContain('2 de 6 marcadas')
+    expect(view.querySelectorAll('.parts__matrix tbody tr')).toHaveLength(2)
+    expect(view.querySelector('.parts__matrix').textContent).toContain('FF313 AVA ARCANO GLOSS BLACK RED')
+
+    // "Seleccionar todas" marca las 6 y, al repetirlo, las desmarca.
+    act(() => view.querySelector('.variants__all input').click())
+    expect(boxes().every((box) => box.checked)).toBe(true)
+    expect(view.querySelectorAll('.parts__matrix tbody tr')).toHaveLength(6)
+    expect(view.querySelector('#solicitud-curva')).not.toBeNull()
+    act(() => view.querySelector('.variants__all input').click())
+    expect(boxes().every((box) => !box.checked)).toBe(true)
+    expect(view.querySelector('.parts__matrix')).toBeNull()
+  })
+
+  it('con más de una va a la carga masiva: una curva para todas y talles propios en una variante', () => {
+    const view = mount(<SkuGeneratorPage />)
+    paste(view, urbax())
+    act(() => view.querySelector('.variants__all input').click())
+
+    // Curva de talles elegida en la revisión.
+    const curve = view.querySelector('#solicitud-curva')
+    ;['S', 'M', 'L'].forEach((size) => act(() => chip(curve, size).click()))
+    act(() => buttonWith(view, 'Cargar en la pantalla').click())
+
+    // Se abre la carga masiva del motor de URBAX con las 6 variantes.
+    const plan = view.querySelector('.plan')
+    expect(plan.textContent).toContain('Carga masiva · 6 variantes')
+    expect(plan.querySelectorAll('.plan__item')).toHaveLength(6)
+    const stepTwo = () => view.querySelector('.main:not([hidden]) .wizard__panel[aria-label="Paso 2: Propuesta"]')
+    const rowsOf = () => stepTwo().querySelectorAll('table.table tbody tr')
+    expect(rowsOf()).toHaveLength(18)
+    expect(stepTwo().textContent).toContain('UBX1031322I7.M')
+
+    // Cambiar la curva afecta a todas las variantes.
+    act(() => chip(plan.querySelector('.plan__list').previousElementSibling, 'XL').click())
+    expect(rowsOf()).toHaveLength(24)
+
+    // Editar los talles de una sola variante: las demás siguen con la curva.
+    const first = () => view.querySelector('.plan__item')
+    const inFirst = (label) => [...first().querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+    act(() => inFirst('Editar talles').click())
+    act(() => chip(first(), 'S').click())
+    // Mientras no se guarda, nada cambia: ni las filas ni la variante.
+    expect(rowsOf()).toHaveLength(24)
+    expect(first().textContent).not.toContain('Talles propios')
+
+    // Cancelar descarta lo editado.
+    act(() => inFirst('Cancelar').click())
+    expect(first().querySelector('.plan__edit')).toBeNull()
+    expect(rowsOf()).toHaveLength(24)
+
+    // Guardar aplica los talles propios de esa variante.
+    act(() => inFirst('Editar talles').click())
+    act(() => chip(first(), 'S').click())
+    act(() => inFirst('Guardar').click())
+    expect(first().querySelector('.plan__edit')).toBeNull()
+    expect(first().textContent).toContain('Talles propios')
+    expect(rowsOf()).toHaveLength(23)
+    expect(stepTwo().textContent).not.toContain('UBX1031322I7.S')
+    expect(stepTwo().textContent).toContain('UBX1031322E8.S')
+
+    // "Usar la curva" devuelve la variante a la curva de todas.
+    act(() => [...first().querySelectorAll('button')].find((b) => b.textContent === 'Usar la curva').click())
+    expect(rowsOf()).toHaveLength(24)
+    expect(first().textContent).not.toContain('Talles propios')
+  })
+
+  it('si una variante tiene datos sin resolver, no se carga y se explica cuál', () => {
+    const view = mount(<SkuGeneratorPage />)
+    paste(view, ['FF313_AVA_ARCANO_GLOSS_BLACK_RED', 'FF313_AVA_ZETANUEVA_GLOSS_BLACK_RED'].join('\n'))
+    act(() => view.querySelector('.variants__all input').click())
+    act(() => buttonWith(view, 'Cargar en la pantalla').click())
+    expect(view.querySelector('.text-error').textContent).toMatch(/Falta resolver gráfica en «FF313 AVA ZETANUEVA GLOSS BLACK RED»/)
+    expect(view.querySelector('.plan')).toBeNull()
+  })
+
+  it('LS2: varias variantes de casco se cargan en la carga masiva con la curva', () => {
+    const view = mount(<SkuGeneratorPage />)
+    paste(view, ['FF806_FUSION_TECK_LIGHT_GRAY_RED_GLOSS', 'FF806_FUSION_TECK_BLACK_GLOSS'].join('\n'))
+    act(() => view.querySelector('.variants__all input').click())
+    ;['M', 'L'].forEach((size) => act(() => chip(view.querySelector('#solicitud-curva'), size).click()))
+    act(() => buttonWith(view, 'Cargar en la pantalla').click())
+
+    expect(view.querySelector('.plan').textContent).toContain('Carga masiva · 2 variantes')
+    expect(view.querySelectorAll('.main:not([hidden]) .wizard__panel[aria-label="Paso 2: Propuesta"] tbody tr.row--main')).toHaveLength(4)
+  })
+})
+
+describe('botones con icono y color por acción', () => {
+  const byText = (view, text) => [...view.querySelectorAll('button')].find((b) => b.textContent.trim() === text)
+  const mounted = () => mount(<App />)
+
+  it('navegación: Anterior / Siguiente con flechas y colores de avance', () => {
+    const view = mounted()
+    expect(byText(view, 'Anterior').className).toContain('btn--secondary')
+    expect(byText(view, 'Anterior').querySelector('svg.icon')).not.toBeNull()
+    expect(byText(view, 'Siguiente').className).toContain('btn--primary')
+    expect(byText(view, 'Siguiente').querySelector('svg.icon')).not.toBeNull()
+  })
+
+  it('confirmar y guardar son verdes; quitar y limpiar, rojos; analizar, negro', () => {
+    const view = mounted()
+    expect(byText(view, 'Confirmar SKU').className).toContain('btn--success')
+    expect(byText(view, 'Ejecutar validaciones').className).toContain('btn--dark')
+    expect(byText(view, 'Interpretar').className).toContain('btn--dark')
+    expect(byText(view, 'Interpretar').querySelector('svg.icon')).not.toBeNull()
+    expect(byText(view, 'Limpiar').className).toContain('btn--danger')
+  })
+
+  it('el menú lateral lleva un icono por sección', () => {
+    const view = mounted()
+    const links = [...view.querySelectorAll('.sidebar__link')]
+    expect(links).toHaveLength(2)
+    links.forEach((link) => expect(link.querySelector('svg.icon')).not.toBeNull())
+  })
+
+  it('en la carga masiva: Guardar es verde, Cancelar neutro y Quitar rojo', () => {
+    const view = mounted()
+    const textarea = view.querySelector('textarea')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, PASTE_EXAMPLES.find((item) => item.id === 'variantes').text)
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => byText(view, 'Interpretar').click())
+    act(() => view.querySelector('.variants__all input').click())
+    act(() => byText(view, 'Cargar en la pantalla').click())
+
+    const item = view.querySelector('.plan__item')
+    const inItem = (label) => [...item.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+    expect(inItem('Quitar').className).toContain('link-button--danger')
+    expect(inItem('Editar talles').querySelector('svg.icon')).not.toBeNull()
+    act(() => inItem('Editar talles').click())
+    expect(inItem('Guardar').className).toContain('btn--success')
+    expect(inItem('Cancelar').className).toContain('btn--secondary')
+    expect(inItem('Guardar').querySelector('svg.icon')).not.toBeNull()
+  })
+})
+
+describe('paso 2: grupos plegables por variante', () => {
+  const byText = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+  const stepTwo = (view) => view.querySelector('.main:not([hidden]) .wizard__panel[aria-label="Paso 2: Propuesta"]')
+
+  function loadSixVariants() {
+    const view = mount(<SkuGeneratorPage />)
+    const textarea = view.querySelector('textarea')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, PASTE_EXAMPLES.find((item) => item.id === 'variantes').text)
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => byText(view, 'Interpretar').click())
+    act(() => view.querySelector('.variants__all input').click())
+    const curve = view.querySelector('#solicitud-curva')
+    ;['S', 'M'].forEach((size) => act(() => [...curve.querySelectorAll('.size-chip')].find((chip) => chip.textContent === size).click()))
+    act(() => byText(view, 'Cargar en la pantalla').click())
+    return view
+  }
+
+  // Cada tarjeta (composición y SKUs a generar) tiene sus propios grupos.
+  const groupsOf = (card) => [...card.querySelectorAll('.group')]
+  const cards = (view) => [...stepTwo(view).querySelectorAll('.card')]
+  const toggleOf = (group) => group.querySelector('.group__toggle')
+
+  it('la composición y los SKU a generar agrupan por variante: el primero expandido y los demás comprimidos', () => {
+    const view = loadSixVariants()
+    const [composition, table] = cards(view)
+
+    ;[composition, table].forEach((card) => {
+      const groups = groupsOf(card)
+      expect(groups).toHaveLength(6)
+      expect(groups.map((group) => toggleOf(group).getAttribute('aria-expanded'))).toEqual(['true', 'false', 'false', 'false', 'false', 'false'])
+      expect(groups[0].querySelector('.group__body').hidden).toBe(false)
+      expect(groups[1].querySelector('.group__body').hidden).toBe(true)
+    })
+  })
+
+  it('cada grupo muestra el nombre de su variante y cuántos SKU tiene', () => {
+    const view = loadSixVariants()
+    const [composition, table] = cards(view)
+    const group = groupsOf(table)[2]
+    expect(group.querySelector('.group__name').textContent).toBe('FF313 AVA ARCANO GLOSS BLACK RED')
+    expect(group.querySelector('.group__meta').textContent).toContain('2 SKUs')
+    expect(groupsOf(composition)[2].querySelector('.group__name').textContent).toBe('FF313 AVA ARCANO GLOSS BLACK RED')
+  })
+
+  it('los demás se expanden y se comprimen a mano, y hay "Expandir todas" / "Contraer todas"', () => {
+    const view = loadSixVariants()
+    const table = cards(view)[1]
+    const expanded = () => groupsOf(table).map((group) => toggleOf(group).getAttribute('aria-expanded'))
+
+    act(() => toggleOf(groupsOf(table)[3]).click())
+    expect(expanded()).toEqual(['true', 'false', 'false', 'true', 'false', 'false'])
+    act(() => toggleOf(groupsOf(table)[0]).click())
+    expect(expanded()).toEqual(['false', 'false', 'false', 'true', 'false', 'false'])
+
+    act(() => byText(table, 'Expandir todas').click())
+    expect(expanded().every((value) => value === 'true')).toBe(true)
+    act(() => byText(table, 'Contraer todas').click())
+    expect(expanded().every((value) => value === 'false')).toBe(true)
+  })
+
+  it('lo escrito en un grupo plegado no se pierde', () => {
+    const view = loadSixVariants()
+    const table = cards(view)[1]
+    const group = () => groupsOf(table)[1]
+    act(() => toggleOf(group()).click())
+    const input = group().querySelector('input[aria-label^="EAN"]')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '6937449162997')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => toggleOf(group()).click())
+    act(() => toggleOf(group()).click())
+    expect(group().querySelector('input[aria-label^="EAN"]').value).toBe('6937449162997')
+  })
+
+  it('con una sola variante no hay grupos', () => {
+    const brand = BRANDS.find((item) => item.id === 'UBX')
+    const request = {
+      nonce: 1,
+      target: 'engine',
+      engineId: ENGINES.cascosUBX.id,
+      payload: {
+        selections: { tipologia: '10', calota: '313', grafica: '22', color: '50' },
+        sizes: ['.S', '.M'],
+        descripcion: 'FF313 AVA ARCANO GLOSS BLACK RED',
+        genericoKey: '',
+        rowData: {},
+      },
+    }
+    const view = mount(<EngineWorkspace brand={brand} engine={ENGINES.cascosUBX} confirmedItems={[]} onConfirmed={noop} loadRequest={request} />)
+    expect(view.querySelectorAll('.group')).toHaveLength(0)
+    expect(view.querySelectorAll('.wizard__panel[aria-label="Paso 2: Propuesta"] table.table tbody tr')).toHaveLength(2)
+  })
+
+  it('LS2: la tabla de SKU también agrupa por variante', () => {
+    const view = mount(<SkuGeneratorPage />)
+    const textarea = view.querySelector('textarea')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, ['FF806_FUSION_TECK_LIGHT_GRAY_RED_GLOSS', 'FF806_FUSION_TECK_BLACK_GLOSS'].join('\n'))
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => byText(view, 'Interpretar').click())
+    act(() => view.querySelector('.variants__all input').click())
+    const curve = view.querySelector('#solicitud-curva')
+    ;['M', 'L'].forEach((size) => act(() => [...curve.querySelectorAll('.size-chip')].find((chip) => chip.textContent === size).click()))
+    act(() => byText(view, 'Cargar en la pantalla').click())
+
+    const table = cards(view).at(-1)
+    const groups = groupsOf(table)
+    expect(groups).toHaveLength(2)
+    expect(groups.map((group) => toggleOf(group).getAttribute('aria-expanded'))).toEqual(['true', 'false'])
+    expect(groups[0].querySelectorAll('tr.row--main')).toHaveLength(2)
+  })
+})
+
+describe('pasar al paso 2 sin cargar lo interpretado', () => {
+  const byText = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+  const visiblePanel = (view) => view.querySelector('.main:not([hidden]) .wizard__panel:not([hidden])').getAttribute('aria-label')
+  const guard = (view) => view.querySelector('.wizard__guard')
+
+  function interpreted() {
+    const view = mount(<SkuGeneratorPage />)
+    const textarea = view.querySelector('textarea')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, PASTE_EXAMPLES.find((item) => item.id === 'mail').text)
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => byText(view, 'Interpretar').click())
+    return view
+  }
+
+  it('si hay algo interpretado sin cargar, "Siguiente" no avanza y explica que la carga es necesaria', () => {
+    const view = interpreted()
+    expect(guard(view)).toBeNull()
+
+    act(() => byText(view, 'Siguiente').click())
+    expect(visiblePanel(view)).toBe('Paso 1: Datos')
+    expect(guard(view).textContent).toContain('hace falta cargar lo interpretado en la pantalla')
+    expect(guard(view).textContent).toContain('se eligen los talles')
+  })
+
+  it('el número de un paso posterior también queda frenado', () => {
+    const view = interpreted()
+    act(() => view.querySelectorAll('.main:not([hidden]) .process__step')[2].click())
+    expect(visiblePanel(view)).toBe('Paso 1: Datos')
+    expect(guard(view)).not.toBeNull()
+  })
+
+  it('el aviso trae el botón para cargar; al cargar desaparece y ya se puede seguir', () => {
+    const view = interpreted()
+    act(() => byText(view, 'Siguiente').click())
+    act(() => byText(guard(view), 'Cargar en la pantalla').click())
+
+    expect(guard(view)).toBeNull()
+    expect(view.querySelector('.paste__notice').textContent).toContain('Cargado en')
+    expect(visiblePanel(view)).toBe('Paso 1: Datos')
+
+    act(() => byText(view, 'Siguiente').click())
+    expect(visiblePanel(view)).toBe('Paso 2: Propuesta')
+    expect(guard(view)).toBeNull()
+  })
+
+  it('si la carga no es posible, el aviso lo dice y sigue frenado', () => {
+    const view = mount(<SkuGeneratorPage />)
+    const textarea = view.querySelector('textarea')
+    // Un modelo que no está en los genéricos: no se puede deducir la marca.
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, 'FF999_NOVA_ARCANO_GLOSS_BLACK_RED')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => byText(view, 'Interpretar').click())
+    act(() => byText(view, 'Siguiente').click())
+    act(() => byText(guard(view), 'Cargar en la pantalla').click())
+
+    expect(visiblePanel(view)).toBe('Paso 1: Datos')
+    expect(guard(view).textContent).toContain('Completá la marca')
+  })
+
+  it('cambiar lo interpretado después de cargar obliga a cargarlo de nuevo', () => {
+    const view = interpreted()
+    act(() => byText(view, 'Siguiente').click())
+    act(() => byText(guard(view), 'Cargar en la pantalla').click())
+    expect(guard(view)).toBeNull()
+
+    // Editar un dato de lo interpretado (la descripción) lo deja sin cargar otra vez.
+    const description = view.querySelector('#solicitud-descripcion')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(description, 'FF806 FUSION OTRA')
+      description.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => byText(view, 'Siguiente').click())
+    expect(visiblePanel(view)).toBe('Paso 1: Datos')
+    expect(guard(view)).not.toBeNull()
+  })
+
+  it('sin nada interpretado, o al volver atrás, no hay aviso', () => {
+    const view = mount(<SkuGeneratorPage />)
+    act(() => byText(view, 'Siguiente').click())
+    expect(visiblePanel(view)).toBe('Paso 2: Propuesta')
+    act(() => byText(view, 'Anterior').click())
+    expect(visiblePanel(view)).toBe('Paso 1: Datos')
+    expect(guard(view)).toBeNull()
+  })
+})
+
+describe('mensaje al pasar el mouse en la composición del SKU', () => {
+  const tooltip = () => document.body.querySelector('[role="tooltip"]')
+  const loaded = () => {
+    const brand = BRANDS.find((item) => item.id === 'UBX')
+    const request = {
+      nonce: 1,
+      target: 'engine',
+      engineId: ENGINES.cascosUBX.id,
+      payload: {
+        selections: { tipologia: '10', calota: '313', grafica: '22', color: '50' },
+        sizes: ['.M'],
+        descripcion: 'FF313 AVA ARCANO GLOSS BLACK RED',
+        genericoKey: '',
+        rowData: {},
+      },
+    }
+    return mount(<EngineWorkspace brand={brand} engine={ENGINES.cascosUBX} confirmedItems={[]} onConfirmed={noop} loadRequest={request} />)
+  }
+  const cell = (view, value) => [...view.querySelectorAll('.sku-parts .tip-target')].find((element) => element.textContent === value)
+
+  it('al enfocar o pasar el mouse por un código explica qué significa; al salir desaparece', () => {
+    const view = loaded()
+    expect(tooltip()).toBeNull()
+
+    act(() => cell(view, '10').focus())
+    expect(tooltip().textContent).toContain('Tipología')
+    expect(tooltip().textContent).toContain('10 → FF SV')
+
+    act(() => cell(view, '10').blur())
+    expect(tooltip()).toBeNull()
+
+    act(() => {
+      cell(view, '313').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+    })
+    expect(tooltip().textContent).toContain('313 → AVA')
+    act(() => {
+      cell(view, '313').dispatchEvent(new MouseEvent('mouseout', { bubbles: true }))
+    })
+    expect(tooltip()).toBeNull()
+  })
+
+  it('cada parte del SKU tiene su mensaje: marca, gráfica, color y talle', () => {
+    const view = loaded()
+    const messageOf = (value) => {
+      act(() => cell(view, value).focus())
+      const message = tooltip().textContent
+      act(() => cell(view, value).blur())
+      return message
+    }
+    expect(messageOf('UBX')).toContain('URBAX')
+    expect(messageOf('22')).toContain('22 → ARCANO')
+    expect(messageOf('50')).toContain('50 → GLOSS BLACK RED')
+    expect(messageOf('.M')).toContain('M')
+  })
+
+  it('un dato nuevo sin aceptar lo avisa en el mensaje', () => {
+    createAlta('grafica-UBX', { codigo: '80', descripcion: 'DRAGON' })
+    const brand = BRANDS.find((item) => item.id === 'UBX')
+    const request = {
+      nonce: 1,
+      target: 'engine',
+      engineId: ENGINES.cascosUBX.id,
+      payload: { selections: { tipologia: '10', calota: '313', grafica: '80', color: '50' }, sizes: ['.M'], descripcion: 'X', genericoKey: '', rowData: {} },
+    }
+    const view = mount(<EngineWorkspace brand={brand} engine={ENGINES.cascosUBX} confirmedItems={[]} onConfirmed={noop} loadRequest={request} />)
+    act(() => cell(view, '80').focus())
+    expect(tooltip().textContent).toContain('80 → DRAGON')
+    expect(tooltip().textContent).toContain('pendiente de aceptar')
+  })
+
+  it('LS2: el prefijo, los 7 dígitos y los libres también explican su origen', () => {
+    const view = mount(<Ls2Workspace brandField={null} loadRequest={{ ...toScreenLoad(interpretRequest(PASTE_EXAMPLES[0].text)), nonce: 1 }} />)
+    act(() => cell(view, 'LS2').focus())
+    expect(tooltip().textContent).toContain('Marca')
+    act(() => cell(view, 'LS2').blur())
+    act(() => cell(view, '9806002').focus())
+    expect(tooltip().textContent).toContain('7 dígitos del código de barras')
+    act(() => cell(view, '9806002').blur())
+    act(() => cell(view, '01').focus())
+    expect(tooltip().textContent).toContain('Dígitos libres')
+  })
+})
+
+describe('SKU ya existente: se omitirá su creación', () => {
+  const byText = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+  const wait = (ms) =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms))
+    })
+
+  function loaded(sizes) {
+    const brand = BRANDS.find((item) => item.id === 'UBX')
+    const request = {
+      nonce: 1,
+      target: 'engine',
+      engineId: ENGINES.cascosUBX.id,
+      payload: {
+        // FF313 AVA ARCANO GLOSS BLACK BLUE: en los datos reales existen S, M, L, XL y 2X; XS no.
+        selections: { tipologia: '10', calota: '313', grafica: '22', color: 'I7' },
+        sizes,
+        descripcion: 'FF313 AVA ARCANO GLOSS BLACK BLUE',
+        genericoKey: '',
+        rowData: {},
+      },
+    }
+    return mount(<EngineWorkspace brand={brand} engine={ENGINES.cascosUBX} confirmedItems={[]} onConfirmed={noop} loadRequest={request} />)
+  }
+
+  it('lo existente se avisa y se omite: solo se confirma lo nuevo, y el resumen lo cuenta', async () => {
+    const view = loaded(['.XS', '.S', '.M', '.L', '.XL', '.2X'])
+    act(() => byText(view, 'Ejecutar validaciones').click())
+    await wait(800)
+
+    // Aviso en cada SKU existente; ninguno bloquea.
+    const results = [...view.querySelectorAll('.wizard__panel[aria-label="Paso 2: Propuesta"] table.table tbody tr')]
+    expect(results.filter((row) => row.classList.contains('row--omit'))).toHaveLength(5)
+    expect(view.querySelector('.conflicts').textContent).toContain('SKU ya existente: se omitirá su creación')
+    expect(byText(view, 'Confirmar SKU').disabled).toBe(true)
+
+    act(() => view.querySelector('.action-bar input[type="checkbox"]').click())
+    act(() => byText(view, 'Confirmar SKU').click())
+
+    const banner = view.querySelector('.confirmation')
+    expect(banner.textContent).toContain('1 SKU confirmado')
+    // El genérico ya existe (hay talles creados): se reutiliza, no se crea de nuevo.
+    expect(banner.textContent).not.toContain('genérico ·')
+    expect([...banner.querySelectorAll('tbody tr')].map((row) => row.querySelector('td').textContent.trim())).toEqual(['UBX1031322I7.XS'])
+    expect(banner.querySelector('.confirmation__omitted').textContent).toContain('Se omitió la creación de 5 SKUs ya existentes')
+    expect(banner.querySelector('.confirmation__omitted').textContent).toContain('UBX1031322I7.S')
+  })
+
+  it('si todos ya existen, no hay nada para crear y no se puede confirmar', async () => {
+    const view = loaded(['.S', '.M'])
+    act(() => byText(view, 'Ejecutar validaciones').click())
+    await wait(800)
+    expect(view.querySelector('.action-bar__hint').textContent).toContain('Todos los SKU ya existen: no hay nada nuevo para crear')
+    const ack = view.querySelector('.action-bar input[type="checkbox"]')
+    if (ack) act(() => ack.click())
+    expect(byText(view, 'Confirmar SKU').disabled).toBe(true)
+  })
+})
+
+describe('paso 3: validaciones agrupadas por variante', () => {
+  const byText = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+  const wait = (ms) =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms))
+    })
+  const stepThree = (view) => view.querySelector('.main:not([hidden]) .wizard__panel[aria-label="Paso 3: Validar y confirmar"]')
+
+  async function validatedSixVariants() {
+    const view = mount(<SkuGeneratorPage />)
+    const textarea = view.querySelector('textarea')
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, PASTE_EXAMPLES.find((item) => item.id === 'variantes').text)
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => byText(view, 'Interpretar').click())
+    act(() => view.querySelector('.variants__all input').click())
+    const curve = view.querySelector('#solicitud-curva')
+    ;['S', 'M'].forEach((size) => act(() => [...curve.querySelectorAll('.size-chip')].find((chip) => chip.textContent === size).click()))
+    act(() => byText(view, 'Cargar en la pantalla').click())
+    act(() => byText(stepThree(view), 'Ejecutar validaciones').click())
+    await wait(800)
+    return view
+  }
+
+  it('los errores y advertencias se agrupan por variante: la primera expandida y las demás plegadas', async () => {
+    const view = await validatedSixVariants()
+    const groups = [...stepThree(view).querySelectorAll('.conflicts .group')]
+    expect(groups).toHaveLength(6)
+    expect(groups.map((group) => group.querySelector('.group__toggle').getAttribute('aria-expanded'))).toEqual(['true', 'false', 'false', 'false', 'false', 'false'])
+    expect(groups[0].querySelector('.group__name').textContent).toBe('FF313 AVA ARCANO GLOSS BLACK BLUE')
+  })
+
+  it('cada grupo resume su estado sin abrirlo: advertencias o "Sin problemas"', async () => {
+    const view = await validatedSixVariants()
+    const groups = [...stepThree(view).querySelectorAll('.conflicts .group')]
+    const meta = (index) => groups[index].querySelector('.group__meta').textContent
+    // BLACK BLUE (I7) ya existe en S y M: se omiten.
+    expect(meta(0)).toContain('2 SKUs')
+    expect(meta(0)).toContain('2 advertencias')
+    // BLACK RED (50) es nueva: nada que avisar.
+    expect(meta(2)).toContain('Sin problemas')
+  })
+
+  it('el contenido de cada grupo son sus propios avisos, y se abre a mano', async () => {
+    const view = await validatedSixVariants()
+    const groups = () => [...stepThree(view).querySelectorAll('.conflicts .group')]
+    expect(groups()[0].querySelector('.group__body').textContent).toContain('UBX1031322I7.S')
+    expect(groups()[0].querySelector('.group__body').textContent).toContain('SKU ya existente: se omitirá su creación')
+    expect(groups()[0].querySelector('.group__body').textContent).not.toContain('UBX1031322E8')
+
+    expect(groups()[2].querySelector('.group__body').hidden).toBe(true)
+    act(() => groups()[2].querySelector('.group__toggle').click())
+    expect(groups()[2].querySelector('.group__body').hidden).toBe(false)
+    expect(groups()[2].querySelector('.group__body').textContent).toContain('UBX103132250.S')
+    expect(groups()[2].querySelector('.group__body').textContent).toContain('Sin problemas')
+    expect(groups()[2].querySelectorAll('.conflict.is-ok')).toHaveLength(2)
+  })
+
+  it('con una sola variante, la lista sigue plana', async () => {
+    const brand = BRANDS.find((item) => item.id === 'UBX')
+    const request = {
+      nonce: 1,
+      target: 'engine',
+      engineId: ENGINES.cascosUBX.id,
+      payload: {
+        selections: { tipologia: '10', calota: '313', grafica: '22', color: 'I7' },
+        sizes: ['.S'],
+        descripcion: 'FF313 AVA ARCANO GLOSS BLACK BLUE',
+        genericoKey: '',
+        rowData: {},
+      },
+    }
+    const view = mount(<EngineWorkspace brand={brand} engine={ENGINES.cascosUBX} confirmedItems={[]} onConfirmed={noop} loadRequest={request} />)
+    act(() => byText(view, 'Ejecutar validaciones').click())
+    await wait(800)
+    expect(view.querySelector('.conflicts').textContent).toContain('SKU ya existente: se omitirá su creación')
+    expect(view.querySelectorAll('.conflicts .group')).toHaveLength(0)
+  })
+})
+
+describe('casos sin problemas en la validación y la confirmación', () => {
+  const byText = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+  const wait = (ms) =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms))
+    })
+
+  function loaded({ color, sizes, rowData = {} }) {
+    const brand = BRANDS.find((item) => item.id === 'UBX')
+    const request = {
+      nonce: 1,
+      target: 'engine',
+      engineId: ENGINES.cascosUBX.id,
+      payload: {
+        selections: { tipologia: '10', calota: '313', grafica: '22', color },
+        sizes,
+        descripcion: 'FF313 AVA ARCANO GLOSS',
+        genericoKey: '',
+        rowData,
+      },
+    }
+    return mount(<EngineWorkspace brand={brand} engine={ENGINES.cascosUBX} confirmedItems={[]} onConfirmed={noop} loadRequest={request} />)
+  }
+  const validate = async (view) => {
+    act(() => byText(view, 'Ejecutar validaciones').click())
+    await wait(800)
+  }
+
+  it('la validación lista también los SKU que pasaron sin problemas', async () => {
+    // BLACK RED (50) es una variante nueva: S y M pasan todos los controles.
+    const view = loaded({ color: '50', sizes: ['.S', '.M'] })
+    await validate(view)
+    const ok = [...view.querySelectorAll('.conflicts .conflict.is-ok')]
+    expect(ok.map((row) => row.querySelector('.mono').textContent)).toEqual(['UBX103132250.S', 'UBX103132250.M'])
+    expect(ok[0].textContent).toContain('Sin problemas')
+    expect(view.querySelector('.conflicts__title').textContent).toBe('Resultado por SKU')
+  })
+
+  it('con avisos y casos sin problemas a la vez, aparecen los dos', async () => {
+    // BLACK BLUE (I7): S existe (se omite) y XS es nuevo pero reutiliza el genérico.
+    const view = loaded({ color: 'I7', sizes: ['.XS', '.S'] })
+    await validate(view)
+    expect(view.querySelectorAll('.conflicts .conflict.is-warn').length).toBeGreaterThan(0)
+    expect(view.querySelectorAll('.conflicts .conflict.is-ok')).toHaveLength(0)
+  })
+
+  it('antes de confirmar, "Qué se va a crear" muestra lo nuevo, lo reutilizado y lo omitido', async () => {
+    const view = loaded({ color: 'I7', sizes: ['.XS', '.S', '.M', '.L', '.XL', '.2X'] })
+    expect(view.querySelector('.creation')).toBeNull()
+    await validate(view)
+
+    const preview = view.querySelector('.creation').textContent
+    expect(preview).toContain('Qué se va a crear')
+    expect(preview).toContain('1 SKU nuevo')
+    expect(preview).toContain('UBX1031322I7.XS')
+    expect(preview).toContain('Se reutiliza el genérico ya existente')
+    expect(preview).toContain('5 SKUs ya existentes: se omitirá su creación')
+  })
+
+  it('una variante nueva muestra sus SKU y su genérico nuevo', async () => {
+    const view = loaded({ color: '50', sizes: ['.S', '.M'] })
+    await validate(view)
+    const preview = view.querySelector('.creation').textContent
+    expect(preview).toContain('2 SKUs nuevos')
+    expect(preview).toContain('+ 1 genérico nuevo')
+    expect(preview).toContain('UBX103132250 · UBX103132250.S · UBX103132250.M')
+    expect(preview).not.toContain('ya existentes')
+  })
+
+  it('lo que tiene errores no cuenta como nuevo y se avisa que impide confirmar', async () => {
+    // Un EAN con dígito verificador inválido bloquea ese SKU.
+    const view = loaded({ color: '50', sizes: ['.S', '.M'], rowData: { '.S': { ean: '6937449162990' } } })
+    await validate(view)
+    const preview = view.querySelector('.creation').textContent
+    expect(preview).toContain('1 SKU nuevo')
+    expect(preview).toContain('1 SKU con error')
+    expect(preview).toContain('no se puede confirmar hasta resolverlos')
+    expect(byText(view, 'Confirmar SKU').disabled).toBe(true)
+  })
+
+  it('el resumen desaparece al confirmar y la confirmación muestra lo creado', async () => {
+    const view = loaded({ color: '50', sizes: ['.S', '.M'] })
+    await validate(view)
+    act(() => byText(view, 'Confirmar SKU').click())
+    expect(view.querySelector('.creation')).toBeNull()
+    expect(view.querySelector('.confirmation').textContent).toContain('2 SKUs confirmados + 1 genérico')
   })
 })

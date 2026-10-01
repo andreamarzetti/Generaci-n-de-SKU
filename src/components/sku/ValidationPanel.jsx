@@ -1,6 +1,7 @@
 import { CHECKS } from '../../rules/validateRows'
 import { Badge } from '../ui/Badge'
 import { Card } from '../ui/Card'
+import { CollapsibleGroups, groupByVariant } from '../ui/CollapsibleGroups'
 
 const STATE_TEXT = {
   idle: 'Todavía no se ejecutaron las validaciones.',
@@ -10,14 +11,52 @@ const STATE_TEXT = {
 
 const COUNTED = ['warn', 'error']
 
-export function ValidationPanel({ status, results, summary, checks = CHECKS, info }) {
+/**
+ * `rows` son las filas de la propuesta: con varias variantes, los errores y advertencias se agrupan por variante
+ * (la primera expandida y las demás plegadas), igual que en la propuesta.
+ */
+export function ValidationPanel({ status, results, summary, checks = CHECKS, info, rows = [] }) {
   const conflicts = (results ?? []).flatMap((row) =>
-    checks.filter((check) => COUNTED.includes(row.checks[check.id].status)).map((check) => ({
-      id: `${row.key}-${check.id}`,
-      sku: row.sku ?? row.key,
-      check: check.label,
-      ...row.checks[check.id],
-    })),
+    checks
+      .filter((check) => COUNTED.includes(row.checks[check.id].status))
+      .map((check) => ({
+        id: `${row.key}-${check.id}`,
+        key: row.key,
+        sku: row.sku ?? row.key,
+        check: check.label,
+        ...row.checks[check.id],
+      })),
+  )
+
+  const resultsByKey = Object.fromEntries((results ?? []).map((row) => [row.key, row]))
+  const hasIssues = (row) => COUNTED.includes(resultsByKey[row.key]?.status)
+  const variantGroups = results
+    ? groupByVariant(rows, { resultsByKey, buildMeta: (items) => (items.some(hasIssues) ? null : <Badge tone="ok">Sin problemas</Badge>) })
+    : null
+
+  // Resultado por SKU: lo que tiene errores o advertencias, y lo que pasó sin problemas.
+  const resultList = (items) => (
+    <ul>
+      {items.flatMap((result) => {
+        const own = conflicts.filter((conflict) => conflict.key === result.key)
+        if (own.length === 0) {
+          return [
+            <li key={result.key} className="conflict is-ok">
+              <span className="mono strong">{result.sku ?? result.key}</span>
+              <span className="conflict__check">Todos los controles</span>
+              <span>Sin problemas</span>
+            </li>,
+          ]
+        }
+        return own.map((conflict) => (
+          <li key={conflict.id} className={`conflict is-${conflict.status}`}>
+            <span className="mono strong">{conflict.sku}</span>
+            <span className="conflict__check">{conflict.check}</span>
+            <span>{conflict.message}</span>
+          </li>
+        ))
+      })}
+    </ul>
   )
 
   return (
@@ -58,19 +97,20 @@ export function ValidationPanel({ status, results, summary, checks = CHECKS, inf
         })}
       </div>
 
-      {conflicts.length > 0 && (
+      {variantGroups ? (
         <div className="conflicts">
-          <h3 className="conflicts__title">Errores y advertencias</h3>
-          <ul>
-            {conflicts.map((conflict) => (
-              <li key={conflict.id} className={`conflict is-${conflict.status}`}>
-                <span className="mono strong">{conflict.sku}</span>
-                <span className="conflict__check">{conflict.check}</span>
-                <span>{conflict.message}</span>
-              </li>
-            ))}
-          </ul>
+          <h3 className="conflicts__title">Resultado por SKU</h3>
+          <CollapsibleGroups groups={variantGroups}>
+            {(group) => resultList(group.rows.map((row) => resultsByKey[row.key]).filter(Boolean))}
+          </CollapsibleGroups>
         </div>
+      ) : (
+        results?.length > 0 && (
+          <div className="conflicts">
+            <h3 className="conflicts__title">Resultado por SKU</h3>
+            {resultList(results)}
+          </div>
+        )
       )}
     </Card>
   )

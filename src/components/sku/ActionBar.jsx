@@ -10,6 +10,7 @@ export function ActionBar({
   onValidate,
   onConfirm,
   pendingAltas = 0,
+  nothingToCreate = false,
 }) {
   const validated = validationStatus === 'done'
   const running = validationStatus === 'running'
@@ -20,6 +21,7 @@ export function ActionBar({
   else if (!validated && !running) hint = 'Ejecutá las validaciones antes de confirmar.'
   else if (validated && summary.error > 0)
     hint = `Resolvé ${summary.error} ${summary.error === 1 ? 'bloqueante' : 'bloqueantes'} para confirmar.`
+  else if (nothingToCreate) hint = 'Todos los SKU ya existen: no hay nada nuevo para crear.'
   else if (pendingAltas > 0) hint = 'Aceptá la creación de los datos nuevos para confirmar.'
   else if (showAck && !warningsAcknowledged) hint = 'Revisá las advertencias para confirmar.'
 
@@ -39,10 +41,10 @@ export function ActionBar({
         {hint && <p className="action-bar__hint">{hint}</p>}
       </div>
       <div className="action-bar__buttons">
-        <Button onClick={onValidate} disabled={!canValidate || running}>
+        <Button variant="dark" icon={validated ? 'refresh' : 'shield'} onClick={onValidate} disabled={!canValidate || running}>
           {running ? 'Validando…' : validated ? 'Volver a validar' : 'Ejecutar validaciones'}
         </Button>
-        <Button variant="primary" onClick={onConfirm} disabled={!canConfirm}>
+        <Button variant="success" icon="checkCircle" onClick={onConfirm} disabled={!canConfirm}>
           Confirmar SKU
         </Button>
       </div>

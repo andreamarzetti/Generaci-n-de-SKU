@@ -13,8 +13,10 @@ export function AcceptCreationDialog({ entries, skus = [], onAccept, onCancel })
       onClose={onCancel}
       footer={
         <>
-          <Button onClick={onCancel}>Cancelar</Button>
-          <Button variant="primary" onClick={() => onAccept(entries.map((entry) => entry.id))}>
+          <Button icon="close" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button variant="success" icon="check" onClick={() => onAccept(entries.map((entry) => entry.id))}>
             Aceptar
           </Button>
         </>

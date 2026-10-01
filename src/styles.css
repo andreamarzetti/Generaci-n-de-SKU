@@ -1281,6 +1281,9 @@ p {
 }
 
 .link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 0;
   border: 0;
   background: none;
@@ -1288,8 +1291,13 @@ p {
   font-size: 12px;
   font-weight: var(--weight-semibold);
   text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
+.link-button:hover { text-decoration-thickness: 2px; }
+.link-button--danger { color: var(--error); }
+.link-button--success { color: var(--ok); }
+.link-button--warning { color: var(--warn); }
 
 .free-digits__group + .free-digits__group {
   margin-top: 12px;
@@ -1981,3 +1989,178 @@ p {
 
 .sku-generic { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 10px; font-size: 13px; }
 .sku-generic__label { font-size: 11px; font-weight: var(--weight-semibold); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ── Carga masiva de variantes ──────────────────────── */
+.plan { display: flex; flex-direction: column; gap: 14px; }
+.plan__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.plan__title { font-size: 13px; font-weight: var(--weight-bold); }
+.plan__picker { display: flex; flex-direction: column; gap: 6px; }
+.plan__list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.plan__item { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.plan__item.is-custom { border-color: var(--warn); }
+.plan__row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.plan__name { flex: 1 1 260px; font-size: 12px; overflow-wrap: anywhere; }
+.plan__sizes { font-size: 12px; color: var(--text-muted); }
+.plan__edit { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+
+.variants__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+.variants__all { color: var(--text); }
+.variants__label { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 260px; cursor: pointer; }
+.variants__label input { width: 16px; height: 16px; accent-color: var(--brand); }
+.parts__cell { display: inline-flex; align-items: center; gap: 6px; }
+.parts__matrix td { vertical-align: middle; }
+
+/* ── Botones por tipo de acción (ver components/ui/Button.jsx) ── */
+.icon { flex: none; }
+
+/* Confirmar o guardar: verde oscuro con texto blanco (el verde de marca lleva texto negro). */
+.btn--success {
+  background: var(--ok);
+  color: var(--text-inverse);
+}
+.btn--success:hover:not(:disabled) {
+  background: var(--sg-negro);
+}
+
+/* Quitar o descartar: contorno rojo; se rellena al pasar el mouse. */
+.btn--danger {
+  background: var(--surface);
+  border-color: var(--error-border);
+  color: var(--error);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--error-bg);
+  border-color: var(--error);
+}
+
+/* Reemplazar o revisar algo existente: ámbar. */
+.btn--warning {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn);
+}
+.btn--warning:hover:not(:disabled) {
+  background: var(--warn-border);
+  color: var(--sg-negro);
+}
+
+/* Neutro con icono: el icono toma un tono suave para no competir con las acciones de color. */
+.btn--secondary .icon,
+.btn--ghost .icon {
+  color: var(--text-muted);
+}
+
+/* Barra lateral */
+.sidebar__link { display: flex; align-items: center; gap: 10px; }
+
+/* Guardar / Cancelar al editar los talles de una variante */
+.plan__edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+
+/* Acción solo con icono: cuadrada, sin subrayado; el fondo toma el color de la acción al pasar el mouse. */
+.link-button--icon {
+  position: relative;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+.link-button--icon:hover { background: var(--surface-muted); border-color: var(--border-strong); }
+.link-button--icon.link-button--danger:hover { background: var(--error-bg); border-color: var(--error-border); }
+.link-button--icon.link-button--success:hover { background: var(--ok-bg); border-color: var(--ok-border); }
+.plan__row .table-actions { gap: 4px; margin-left: auto; }
+
+/* ── Grupos plegables por variante ──────────────────── */
+.groups { display: flex; flex-direction: column; gap: 8px; }
+.groups__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.group { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.group.is-open { border-color: var(--border-strong); }
+.group__title { margin: 0; font-size: 13px; }
+.group__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.group__toggle:hover { background: var(--surface-muted); }
+.group__name { flex: 1 1 auto; font-family: var(--font-mono); font-size: 12px; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.group__meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; font-weight: var(--weight-medium); color: var(--text-muted); }
+.group__body { padding: 0 12px 12px; }
+.group__body[hidden] { display: none; }
+
+/* Aviso al querer pasar de paso sin haber cargado lo interpretado */
+.wizard__guard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.wizard__guard p { flex: 1 1 320px; font-size: 13px; font-weight: var(--weight-medium); }
+
+/* ── Mensaje al pasar el mouse (components/ui/Tooltip.jsx) ── */
+.tip-target { display: inline-block; cursor: help; border-radius: 4px; }
+.tip-target:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+.tooltip {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--brand);
+  color: var(--text-inverse);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+  line-height: 1.4;
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
+  box-shadow: var(--shadow-raised);
+  transform: translate(-50%, -100%);
+}
+.tooltip--below { transform: translate(-50%, 0); }
+.tooltip__title { font-size: 11px; font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.06em; color: var(--sg-verde); }
+.tooltip__note { font-style: normal; font-size: 11px; color: var(--warn-border); }
+
+/* SKU que ya existe: se omite su creación */
+.row--omit .mono.strong { color: var(--text-muted); text-decoration: line-through; }
+.confirmation__omitted {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+/* SKU que pasó la validación sin problemas */
+.conflict.is-ok { background: var(--ok-bg); color: var(--ok); }
+
+.conflict.is-ok::before { content: "✓"; font-weight: var(--weight-bold); }
+
+/* Qué se va a crear al confirmar */
+.creation { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.creation__title { font-size: 13px; font-weight: var(--weight-bold); }
+.creation__line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
+.creation__line--ok { color: var(--ok); }
+.creation__line--warn { color: var(--warn); }
+.creation__line--error { color: var(--error); }
+.creation__skus { font-size: 12px; overflow-wrap: anywhere; color: var(--text); }

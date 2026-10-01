@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Wizard } from '../components/layout/Wizard'
+import { CreationPreview } from '../components/reference/CreationPreview'
 import { PendingAltasNotice } from '../components/reference/PendingAltasNotice'
 import { ActionBar } from '../components/sku/ActionBar'
 import { AppliedRulesInfo } from '../components/sku/AppliedRules'
@@ -13,6 +14,7 @@ import { GenericSelect } from '../components/sku/GenericSelect'
 import { OutputPanel } from '../components/sku/OutputPanel'
 import { SkuComposition } from '../components/sku/SkuComposition'
 import { SkuTable } from '../components/sku/SkuTable'
+import { VariantPlanner } from '../components/sku/VariantPlanner'
 import { ValidationPanel } from '../components/sku/ValidationPanel'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -37,7 +39,7 @@ const DESCRIPTION_FIELD = {
  * Generación de SKU para LS2: motor propio. Diseño de Abril (composición y reglas a la
  * izquierda, datos a la derecha); con las reglas cerradas, el resto pasa a todo el ancho.
  */
-export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadRequest = null, onLoadResult }) {
+export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadRequest = null, onLoadResult, stepGuard = null }) {
   const sku = useSkuGenerator({ loadRequest, onLoadResult })
   const { family, form, proposal, validation, actions } = sku
   const [step, setStep] = useState(0)
@@ -54,11 +56,11 @@ export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadR
           <div className="card__actions">
             {sku.mode === 'manual' &&
               sku.examples.map((example) => (
-                <Button key={example.id} size="sm" title={example.description} onClick={() => actions.loadExample(example.id)}>
+                <Button key={example.id} size="sm" icon="sparkles" title={example.description} onClick={() => actions.loadExample(example.id)}>
                   {example.label}
                 </Button>
               ))}
-            <Button size="sm" variant="ghost" onClick={actions.clearForm}>
+            <Button size="sm" variant="danger" icon="eraser" onClick={actions.clearForm}>
               Limpiar
             </Button>
           </div>
@@ -94,6 +96,18 @@ export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadR
 
           {sku.mode === 'manual' ? (
             <FamilyFields idPrefix={family.id} fields={[DESCRIPTION_FIELD, ...family.fields]} form={form} onChange={actions.updateField} />
+          ) : sku.plan ? (
+            <VariantPlanner
+              idPrefix={family.id}
+              variants={sku.plan.variants}
+              curve={sku.plan.curve}
+              sizeGroups={[{ label: 'Talles', sizes: sku.planSizes.map((size) => ({ code: size, label: size })) }]}
+              onToggleCurve={actions.togglePlanCurve}
+              onSaveVariantSizes={actions.setPlanVariantSizes}
+              onResetVariant={actions.resetPlanVariant}
+              onRemoveVariant={actions.removePlanVariant}
+              onExit={actions.exitPlan}
+            />
           ) : (
             <BatchInput
               id={`${family.id}-lote`}
@@ -128,7 +142,13 @@ export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadR
       />
     </>,
     <>
-      <ValidationPanel status={validation.status} results={validation.results} summary={validation.summary} info={<AuditInfo />} />
+      <ValidationPanel
+        status={validation.status}
+        results={validation.results}
+        summary={validation.summary}
+        rows={proposal.rows}
+        info={<AuditInfo />}
+      />
 
       <OutputPanel
         family={family}
@@ -149,9 +169,11 @@ export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadR
         />
       ) : (
         <>
+          <CreationPreview creation={sku.creation} />
           <PendingAltasNotice altas={sku.pendingAltas} skus={sku.pendingSkus} />
           <ActionBar
             pendingAltas={sku.pendingAltas.length}
+          nothingToCreate={sku.nothingToCreate}
             validationStatus={validation.status}
             summary={validation.summary}
             canValidate={sku.canValidate}
@@ -172,6 +194,7 @@ export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadR
       <Wizard
         current={step}
         onChange={setStep}
+        guard={(from) => (from === 0 ? stepGuard : null)}
         steps={steps.map((item, index) => ({ ...item, content: content[index], narrow: index === 0 }))}
       />
     </main>

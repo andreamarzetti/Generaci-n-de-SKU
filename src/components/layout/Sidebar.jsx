@@ -1,8 +1,9 @@
 import logoBlanco from '../../assets/brand/Logo_2026_blanco_Servicom.png'
+import { Icon } from '../ui/Icon'
 
 const VIEWS = [
-  { id: 'generador', label: 'Generación de SKU' },
-  { id: 'referencias', label: 'Altas de referencia' },
+  { id: 'generador', label: 'Generación de SKU', icon: 'list' },
+  { id: 'referencias', label: 'Altas de referencia', icon: 'database' },
 ]
 
 export function Sidebar({ view = 'generador', onNavigate = () => {}, pendingAltas = 0 }) {
@@ -26,6 +27,7 @@ export function Sidebar({ view = 'generador', onNavigate = () => {}, pendingAlta
               onNavigate(item.id)
             }}
           >
+            <Icon name={item.icon} size={17} />
             {item.label}
             {item.id === 'referencias' && pendingAltas > 0 && <span className="sidebar__count">{pendingAltas}</span>}
           </a>

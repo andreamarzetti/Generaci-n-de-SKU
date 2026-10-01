@@ -5,7 +5,7 @@ import { Button } from '../ui/Button'
 /** Lote confirmado: resumen para copiar (como el mail de cierre de un alta) y descarga .xlsx. */
 export function ConfirmationBanner({ confirmation, onStartNew }) {
   const [feedback, setFeedback] = useState('')
-  const { items } = confirmation
+  const { items, omitted = [] } = confirmation
   const generics = items.filter((item) => item.esGenerico).length
   const sized = items.length - generics
 
@@ -44,9 +44,13 @@ export function ConfirmationBanner({ confirmation, onStartNew }) {
           <p className="confirmation__note">Registrados solo en esta sesión (mock). No se envió nada a Tango.</p>
         </div>
         <div className="confirmation__actions">
-          <Button onClick={copy}>Copiar resumen</Button>
-          <Button onClick={download}>Descargar .xlsx</Button>
-          <Button variant="dark" onClick={onStartNew}>
+          <Button icon="copy" onClick={copy}>
+            Copiar resumen
+          </Button>
+          <Button icon="download" onClick={download}>
+            Descargar .xlsx
+          </Button>
+          <Button variant="primary" icon="plus" onClick={onStartNew}>
             Nueva generación
           </Button>
         </div>
@@ -77,9 +81,15 @@ export function ConfirmationBanner({ confirmation, onStartNew }) {
         </table>
       </div>
 
+      {omitted.length > 0 && (
+        <p className="confirmation__omitted" role="note">
+          Se omitió la creación de {omitted.length} {omitted.length === 1 ? 'SKU ya existente' : 'SKUs ya existentes'}: <span className="mono">{omitted.join(' · ')}</span>
+        </p>
+      )}
+
       <p className="confirmation__note">
         {feedback && <strong>{feedback}. </strong>}
-        El SKU genérico es el mismo SKU sin el talle: va primero, con el talle vacío. El .xlsx trae una hoja "Artículos" (SKU, Descripción, EAN, Código genérico, Talle, Precio). El formato de
+        El SKU genérico es el mismo SKU sin el talle: va primero, con el talle vacío, y es el código genérico de los SKU de su curva. El .xlsx trae una hoja "Artículos" (SKU, Descripción, EAN, Código genérico, Talle, Precio, Clasificación). El formato de
         importación a Tango se ajusta cuando tengamos la plantilla oficial.
       </p>
     </div>

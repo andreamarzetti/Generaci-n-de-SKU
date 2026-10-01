@@ -8,7 +8,16 @@ import { FAMILIES } from '../rules/families'
 import { EngineWorkspace } from './EngineWorkspace'
 import { Ls2Workspace } from './Ls2Workspace'
 
-const INITIAL_PASTE = { open: true, text: '', draft: null, message: null, loadError: null, pendingConfirm: null, notice: null }
+const INITIAL_PASTE = {
+  open: true,
+  text: '',
+  draft: null,
+  loaded: false,
+  message: null,
+  loadError: null,
+  pendingConfirm: null,
+  notice: null,
+}
 
 /**
  * Primer paso: elegir la marca (o pegar la solicitud, que la completa). LS2 usa su
@@ -42,13 +51,15 @@ export function SkuGeneratorPage() {
       const result = interpretRequest(paste.text)
       updatePaste({
         draft: result.empty ? null : result,
+        loaded: false,
         message: result.message,
         loadError: null,
         pendingConfirm: null,
         notice: null,
       })
     },
-    setDraft: (draft) => updatePaste({ draft, loadError: null }),
+    // Cualquier cambio a lo interpretado obliga a volver a cargarlo.
+    setDraft: (draft) => updatePaste({ draft, loaded: false, loadError: null }),
     load: () => {
       const load = toScreenLoad(paste.draft)
       if (!load.ok) {
@@ -79,6 +90,7 @@ export function SkuGeneratorPage() {
       return
     }
     updatePaste({
+      loaded: true,
       pendingConfirm: null,
       notice: `Cargado en ${targetLabel(loadRequest)}. Revisá la propuesta, completá lo que falte y validá.`,
     })
@@ -86,6 +98,22 @@ export function SkuGeneratorPage() {
   }
 
   const topSlot = <PasteRequestCard state={paste} actions={pasteActions} />
+
+  // Lo interpretado todavía no está en la pantalla: no se puede seguir al paso 2, porque ahí
+  // se eligen los talles y se arma la propuesta a partir de lo cargado.
+  const stepGuard =
+    paste.draft && !paste.loaded
+      ? {
+          message: [
+            'Para pasar al siguiente paso hace falta cargar lo interpretado en la pantalla: ahí se eligen los talles, se completan los datos y se arma la propuesta.',
+            paste.loadError,
+          ]
+            .filter(Boolean)
+            .join(' '),
+          actionLabel: 'Cargar en la pantalla',
+          onAction: pasteActions.load,
+        }
+      : null
 
   const brandField = (
     <div className="field">
@@ -115,6 +143,7 @@ export function SkuGeneratorPage() {
         topSlot={brandId === 'LS2' ? topSlot : null}
         loadRequest={loadRequest}
         onLoadResult={onLoadResult}
+        stepGuard={stepGuard}
       />
       {line && (
         <EngineWorkspace
@@ -128,6 +157,7 @@ export function SkuGeneratorPage() {
           topSlot={topSlot}
           loadRequest={loadRequest}
           onLoadResult={onLoadResult}
+          stepGuard={stepGuard}
         />
       )}
     </>

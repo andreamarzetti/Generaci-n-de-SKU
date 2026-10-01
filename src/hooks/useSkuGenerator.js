@@ -1,15 +1,20 @@
 import { useMemo, useRef, useState } from 'react'
 import { EXAMPLES } from '../data/examples'
-import { EXISTING_SKUS, findGenerico, genericosForFamily } from '../data/realData'
+import { EXISTING_SKUS, findGenerico, genericosForFamily, OFFICIAL_SIZES } from '../data/realData'
 import { parseBatch } from '../rules/batch'
 import { buildProposal, proposalSegments } from '../rules/buildProposal'
 import { buildClassification } from '../rules/classification'
 import { emptyForm, FAMILIES, FAMILY_LIST } from '../rules/families'
 import { pendingAltasUsed } from '../reference/store'
 import { useAltas } from '../reference/useAltas'
+import { normalizeSize } from '../rules/sizes'
+import { genericExists, genericSkuOf } from '../rules/genericSku'
+import { ls2RowsFromPlan, sameSizes, toggleInOrder } from '../rules/variantPlan'
 import { validateProposal } from '../services/mockSkuService'
 import { useExternalLoad } from './useExternalLoad'
 
+// Talles para la curva de la carga masiva (cascos).
+const PLAN_SIZES = OFFICIAL_SIZES.filter((size) => size !== 'TU')
 const initialForms = () => Object.fromEntries(FAMILY_LIST.map((family) => [family.id, emptyForm(family)]))
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
 
@@ -32,6 +37,8 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   const [modeByFamily, setModeByFamily] = useState({})
   const [batchTextByFamily, setBatchTextByFamily] = useState({})
   const [batchByFamily, setBatchByFamily] = useState({})
+  // Carga masiva de varias variantes con una curva de talles: { variants: [{ key, descripcion, sizes }], curve }.
+  const [planByFamily, setPlanByFamily] = useState({})
   const [rowDataByFamily, setRowDataByFamily] = useState({})
   const [freeDigitChoice, setFreeDigitChoice] = useState({})
   const [validation, setValidation] = useState({ status: 'idle' })
@@ -44,7 +51,9 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   const form = forms[familyId]
   const mode = modeByFamily[familyId] ?? 'manual'
   const batchText = batchTextByFamily[familyId] ?? ''
-  const batchRows = mode === 'lote' ? (batchByFamily[familyId] ?? null) : null
+  const plan = planByFamily[familyId] ?? null
+  const planRows = useMemo(() => (plan ? ls2RowsFromPlan(plan, normalizeSize) : null), [plan])
+  const batchRows = mode === 'lote' ? (planRows ?? batchByFamily[familyId] ?? null) : null
   const batchPreview = useMemo(() => parseBatch(batchText, family), [batchText, family])
   const rowData = useMemo(() => rowDataByFamily[familyId] ?? {}, [rowDataByFamily, familyId])
   // `altas` cambia cuando se crea o acepta un alta: hay que volver a leer los genéricos.
@@ -91,12 +100,33 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   const isConfirmed = lastConfirmation?.signature === signature
 
   const canValidate = proposal.rows.length > 0
+  // Los SKU que ya existen se omiten: no se crean ni van al resumen. El genérico ya existente se reutiliza.
+  const omittedKeys = new Set((results ?? []).filter((row) => row.omit).map((row) => row.key))
+  const nothingToCreate = Boolean(results) && proposal.rows.length > 0 && omittedKeys.size === proposal.rows.length
+  // Qué se va a crear al confirmar: lo nuevo, lo que se omite por ya existir y los genéricos (nuevos o reutilizados).
+  const failedKeys = new Set((results ?? []).filter((row) => row.status === 'error').map((row) => row.key))
+  const creationSources = { existingSkus: EXISTING_SKUS, sessionSkus: new Set(session.skus) }
+  const creation = results
+    ? {
+        // Lo nuevo sin problemas: no se omite y no tiene errores que lo bloqueen.
+        create: proposal.rows.filter((row) => !omittedKeys.has(row.key) && !failedKeys.has(row.key) && row.sku).map((row) => row.sku),
+        omit: proposal.rows.filter((row) => omittedKeys.has(row.key)).map((row) => row.sku),
+        newGenerics: proposal.generics.filter((item) => !genericExists(item.sku, creationSources)).map((item) => item.sku),
+        reusedGenerics: proposal.generics.filter((item) => genericExists(item.sku, creationSources)).map((item) => item.sku),
+        blocked: summary.error,
+      }
+    : null
   const canConfirm =
-    Boolean(results) && summary.error === 0 && (summary.warn === 0 || warningsAcknowledged) && !isConfirmed && pendingAltas.length === 0
+    Boolean(results) &&
+    summary.error === 0 &&
+    (summary.warn === 0 || warningsAcknowledged) &&
+    !isConfirmed &&
+    pendingAltas.length === 0 &&
+    !nothingToCreate
 
   // Etapas: cada una se completa recién cuando se cumple su condición.
   const dataComplete =
-    Boolean(generico) &&
+    (Boolean(generico) || proposal.generics.length > 0) &&
     proposal.rows.length > 0 &&
     proposal.rows.every((row) => {
       const data = rowData[row.key] ?? {}
@@ -157,15 +187,43 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   const applyBatch = () => {
     if (batchPreview.rows.length === 0) return
     setFamilyState(setBatchByFamily, batchPreview.rows)
-    setFamilyState(
-      setRowDataByFamily,
-      Object.fromEntries(batchPreview.rows.map((row) => [row.key, { barras: row.barras, ean: row.ean }])),
-    )
+    setFamilyState(setRowDataByFamily, Object.fromEntries(batchPreview.rows.map((row) => [row.key, { barras: row.barras, ean: row.ean }])))
     setLastConfirmation(null)
     resetValidation()
   }
 
+  const updatePlan = (change) => {
+    setPlanByFamily((prev) => (prev[familyId] ? { ...prev, [familyId]: change(prev[familyId]) } : prev))
+    resetValidation()
+  }
+  const togglePlanCurve = (code) => updatePlan((current) => ({ ...current, curve: toggleInOrder(current.curve, code, PLAN_SIZES) }))
+  const setPlanVariantSizes = (key, sizes) =>
+    updatePlan((current) => ({
+      ...current,
+      variants: current.variants.map((variant) =>
+        variant.key === key ? { ...variant, sizes: sameSizes(sizes, current.curve) ? null : sizes } : variant,
+      ),
+    }))
+  const resetPlanVariant = (key) =>
+    updatePlan((current) => ({
+      ...current,
+      variants: current.variants.map((variant) => (variant.key === key ? { ...variant, sizes: null } : variant)),
+    }))
+  const exitPlan = () => {
+    setFamilyState(setPlanByFamily, null)
+    setFamilyState(setModeByFamily, 'manual')
+    setFamilyState(setRowDataByFamily, {})
+    setLastConfirmation(null)
+    resetValidation()
+  }
+  const removePlanVariant = (key) => {
+    const variants = plan ? plan.variants.filter((variant) => variant.key !== key) : []
+    if (variants.length === 0) exitPlan()
+    else updatePlan((current) => ({ ...current, variants }))
+  }
+
   const discardBatch = () => {
+    setFamilyState(setPlanByFamily, null)
     setFamilyState(setBatchByFamily, null)
     setFamilyState(setRowDataByFamily, {})
     resetValidation()
@@ -186,17 +244,24 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   const formHasData = (familyKey) => {
     const current = forms[familyKey]
     const filled = Object.values(current).some((value) => (Array.isArray(value) ? value.length > 0 : Boolean(value)))
-    return filled || Object.keys(rowDataByFamily[familyKey] ?? {}).length > 0 || Boolean(batchByFamily[familyKey])
+    return (
+      filled ||
+      Object.keys(rowDataByFamily[familyKey] ?? {}).length > 0 ||
+      Boolean(batchByFamily[familyKey]) ||
+      Boolean(planByFamily[familyKey])
+    )
   }
 
   useExternalLoad(loadRequest, {
     applies: (request) => request.target === 'ls2',
     hasData: loadRequest?.target === 'ls2' ? formHasData(loadRequest.payload.familyId) : false,
-    apply: ({ familyId: targetFamily, form: loadedForm, rowData: loadedRows }) => {
+    apply: ({ familyId: targetFamily, form: loadedForm, rowData: loadedRows, plan: loadedPlan }) => {
       setFamilyId(targetFamily)
       setForms((prev) => ({ ...prev, [targetFamily]: { ...emptyForm(FAMILIES[targetFamily]), ...loadedForm } }))
-      setModeByFamily((prev) => ({ ...prev, [targetFamily]: 'manual' }))
+      // Con varias variantes se abre la carga masiva con su curva de talles; si no, la carga uno por uno.
+      setModeByFamily((prev) => ({ ...prev, [targetFamily]: loadedPlan ? 'lote' : 'manual' }))
       setBatchByFamily((prev) => ({ ...prev, [targetFamily]: null }))
+      setPlanByFamily((prev) => ({ ...prev, [targetFamily]: loadedPlan ?? null }))
       setRowDataByFamily((prev) => ({ ...prev, [targetFamily]: loadedRows }))
       setLastConfirmation(null)
       resetValidation()
@@ -208,6 +273,7 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
     setForms((prev) => ({ ...prev, [familyId]: emptyForm(family) }))
     setFamilyState(setRowDataByFamily, {})
     setFamilyState(setBatchByFamily, null)
+    setFamilyState(setPlanByFamily, null)
     setFamilyState(setBatchTextByFamily, '')
     resetValidation()
   }
@@ -224,30 +290,36 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
 
   const confirm = () => {
     if (!canConfirm) return
-    const genericItems = proposal.generics.map((item) => ({
+    const sources = { existingSkus: EXISTING_SKUS, sessionSkus: new Set(session.skus) }
+    const toCreate = proposal.rows.filter((row) => !omittedKeys.has(row.key))
+    const genericItems = proposal.generics.filter((item) => !genericExists(item.sku, sources)).map((item) => ({
       sku: item.sku,
       ean: '',
       descTango: item.descripcion,
       gs1: '',
       talle: '',
       precio: '',
-      generico: generico?.codigo,
+      generico: item.sku,
+      clasificacion: generico?.codigo ?? '',
       familyId,
       esGenerico: true,
     }))
-    const items = proposal.rows.map((row) => ({
+    const items = toCreate.map((row) => ({
       sku: row.sku,
       ean: onlyDigits(rowData[row.key]?.ean),
       descTango: row.tango.text,
       gs1: row.gs1,
       talle: row.size?.value ?? '',
       precio: rowData[row.key]?.precio ?? '',
-      generico: generico?.codigo,
+      // Los SKU de la curva pertenecen a su SKU genérico (el mismo SKU sin talle).
+      generico: genericSkuOf(row.sku) ?? generico?.codigo ?? '',
+      clasificacion: generico?.codigo ?? '',
       familyId,
     }))
     const all = [...genericItems, ...items]
     setConfirmedItems((prev) => [...prev, ...all])
-    setLastConfirmation({ signature, items: all, familyLabel: family.label, at: new Date() })
+    const omitted = proposal.rows.filter((row) => omittedKeys.has(row.key)).map((row) => row.sku)
+    setLastConfirmation({ signature, items: all, omitted, familyLabel: family.label, at: new Date() })
   }
 
   const startNew = () => {
@@ -262,6 +334,8 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
     batchText,
     batchPreview,
     batchLoaded: Boolean(batchRows),
+    plan,
+    planSizes: PLAN_SIZES,
     rowData,
     genericos,
     generico,
@@ -279,6 +353,8 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
     warningsAcknowledged,
     canValidate,
     canConfirm,
+    nothingToCreate,
+    creation,
     pendingAltas,
     pendingSkus: proposal.rows.map((row) => row.sku).filter(Boolean),
     isConfirmed,
@@ -292,6 +368,11 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
       setBatchText,
       applyBatch,
       discardBatch,
+      togglePlanCurve,
+      setPlanVariantSizes,
+      resetPlanVariant,
+      removePlanVariant,
+      exitPlan,
       loadExample,
       clearForm,
       runValidation,

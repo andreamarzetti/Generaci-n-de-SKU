@@ -1,6 +1,9 @@
-import { Fragment } from 'react'
 import { MAX_SKU_LENGTH } from '../../rules/constants'
+import { Badge } from '../ui/Badge'
 import { Card } from '../ui/Card'
+import { isPendingAlta } from '../../reference/store'
+import { CollapsibleGroups } from '../ui/CollapsibleGroups'
+import { Tooltip } from '../ui/Tooltip'
 
 export function SkuComposition({ segments, rowSegments = [], proposal, onChooseFreeDigit, showFreeDigits, info }) {
   const lengths = proposal.rows.filter((row) => row.sku).map((row) => row.sku.length)
@@ -8,6 +11,54 @@ export function SkuComposition({ segments, rowSegments = [], proposal, onChooseF
   const hasPending = segments.some((segment) => segment.pending)
   const groups = proposal.groups ?? []
   const skusByVariant = groupByVariant(rowSegments)
+
+  // Una tabla con la composición de los SKU de una variante (o de todos, si hay una sola).
+  const renderTable = (items) => (
+    <div className="sku-parts-wrap">
+      <table className="sku-parts">
+        <thead>
+          <tr>
+            {segments.map((segment) => (
+              <th key={segment.id} scope="col">
+                {segment.label}
+                {segment.pending && <sup title="A validar">*</sup>}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.length === 0 ? (
+            <SegmentRow segments={segments} error={proposal.issues[0]} showMessage={false} />
+          ) : (
+            items.map(({ row, segments: rowParts }) => (
+              <SegmentRow key={row.key} segments={rowParts} error={row.sku ? null : (row.buildError ?? 'Falta completar datos')} />
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  // Con varias variantes: la primera expandida y las demás comprimidas.
+  const variantGroups =
+    skusByVariant.length > 1
+      ? skusByVariant.map(([variant, items]) => {
+          const unresolved = items.filter(({ row }) => !row.sku).length
+          return {
+            key: variant || 'sin descripción',
+            title: variant || 'sin descripción',
+            items,
+            meta: (
+              <>
+                <span>
+                  {items.length} {items.length === 1 ? 'SKU' : 'SKUs'}
+                </span>
+                {unresolved > 0 && <Badge tone="error">{unresolved} sin armar</Badge>}
+              </>
+            ),
+          }
+        })
+      : null
 
   return (
     <Card
@@ -21,40 +72,11 @@ export function SkuComposition({ segments, rowSegments = [], proposal, onChooseF
         </span>
       }
     >
-      <div className="sku-parts-wrap">
-        <table className="sku-parts">
-          <thead>
-            <tr>
-              {segments.map((segment) => (
-                <th key={segment.id} scope="col">
-                  {segment.label}
-                  {segment.pending && <sup title="A validar">*</sup>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rowSegments.length === 0 ? (
-              <SegmentRow segments={segments} error={proposal.issues[0]} showMessage={false} />
-            ) : (
-              skusByVariant.map(([variant, items]) => (
-                <Fragment key={variant}>
-                  {skusByVariant.length > 1 && (
-                    <tr>
-                      <th colSpan={segments.length} scope="rowgroup" className="sku-parts__variant">
-                        {variant || 'sin descripción'}
-                      </th>
-                    </tr>
-                  )}
-                  {items.map(({ row, segments: rowParts }) => (
-                    <SegmentRow key={row.key} segments={rowParts} error={row.sku ? null : (row.buildError ?? 'Falta completar datos')} />
-                  ))}
-                </Fragment>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {variantGroups ? (
+        <CollapsibleGroups groups={variantGroups}>{(group) => renderTable(group.items)}</CollapsibleGroups>
+      ) : (
+        renderTable(rowSegments)
+      )}
       {rowSegments.length > 0 && (
         <p className="muted small sku-parts__count">
           {rowSegments.length} {rowSegments.length === 1 ? 'SKU' : 'SKUs'} por talle
@@ -130,7 +152,7 @@ function SegmentRow({ segments, error, showMessage = true }) {
       <tr className={error ? 'is-unresolved' : ''} title={error ?? undefined}>
         {segments.map((segment) => (
           <td key={segment.id} className={`sku-parts__cell sku-parts__cell--${segment.variant} ${segment.value ? '' : 'is-empty'}`}>
-            {segment.value || '·'.repeat(segment.size ?? 3)}
+            <SegmentValue segment={segment} />
           </td>
         ))}
       </tr>
@@ -143,9 +165,34 @@ function SegmentRow({ segments, error, showMessage = true }) {
   )
 }
 
+/** El código de una parte del SKU; al pasar el mouse explica qué significa (ej. 10 → Tipología: FF SV). */
+function SegmentValue({ segment }) {
+  const { value, detail } = segment
+  if (!value) return '·'.repeat(segment.size ?? 3)
+  if (!detail) return value
+
+  const pending = detail.alta && isPendingAlta(detail.alta)
+  return (
+    <Tooltip
+      content={
+        <>
+          <strong className="tooltip__title">{detail.title}</strong>
+          <span>{detail.plain ? detail.text : `${value} → ${detail.text ?? 'sin descripción en la tabla'}`}</span>
+          {pending && <em className="tooltip__note">Dato nuevo: pendiente de aceptar</em>}
+        </>
+      }
+    >
+      {value}
+    </Tooltip>
+  )
+}
+
 /** La lista completa tiene más de 600 pares: se muestran los próximos 30 desde el primero libre y el elegido. */
 function visibleFreeDigits(group) {
-  const firstFree = Math.max(group.options.findIndex((option) => !option.usedIn), 0)
+  const firstFree = Math.max(
+    group.options.findIndex((option) => !option.usedIn),
+    0,
+  )
   return group.options.filter((option, index) => index <= firstFree + 30 || option.value === group.freeDigit)
 }
 

@@ -3,7 +3,9 @@ import { MAX_SKU_LENGTH } from '../../rules/constants'
 import { MAX_TANGO_DESCRIPTION } from '../../rules/descriptions'
 import { Badge } from '../ui/Badge'
 import { Card } from '../ui/Card'
+import { CollapsibleGroups, groupByVariant } from '../ui/CollapsibleGroups'
 import { STATUS_META } from '../ui/status'
+import { LinkButton } from '../ui/LinkButton'
 
 const digits = (value) => value.replace(/\D/g, '')
 const price = (value) => value.replace(/[^\d.,]/g, '')
@@ -14,94 +16,103 @@ export function SkuTable({ family, rows, rowData, results, onRowChange, validati
   const barcodeRequired = family.scheme === 'cascos'
   const columns = showSource ? 8 : 7
 
+  const groups = groupByVariant(rows, { resultsByKey })
+  const renderTable = (list) => (
+    <div className="table-wrap">
+      <table className="table table--centered">
+        <thead>
+          <tr>
+            <th>Talle</th>
+            {showSource && <th>Cód. proveedor</th>}
+            <th>SKU propuesto</th>
+            <th className="num">Largo</th>
+            <th>Cód. barras{barcodeRequired ? '' : ' (opc.)'}</th>
+            <th>EAN</th>
+            <th>Precio (opc.)</th>
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((row) => {
+            const result = resultsByKey[row.key]
+            const data = rowData[row.key] ?? {}
+            const length = row.sku?.length ?? 0
+            const rowClass = [result ? `row--${result.status}` : '', result?.omit ? 'row--omit' : ''].join(' ')
+            return (
+              <Fragment key={row.key}>
+                <tr className={`${rowClass} row--main`}>
+                  <td>
+                    <span className="strong">{row.label}</span>
+                    {row.size?.normalized && <span className="size-received">recibido {row.size.raw}</span>}
+                    {row.line && <span className="size-received muted">línea {row.line}</span>}
+                  </td>
+                  {showSource && <td className="mono muted">{row.source}</td>}
+                  <td className="mono strong">{row.sku ?? <span className="muted small">sin armar</span>}</td>
+                  <td className={`num mono ${length > MAX_SKU_LENGTH ? 'text-error strong' : ''}`}>{length || '—'}</td>
+                  <td>
+                    <input
+                      className="input input--mono input--sm"
+                      aria-label={`Código de barras ${row.label}`}
+                      inputMode="numeric"
+                      maxLength={14}
+                      placeholder="Código de barras"
+                      value={data.barras ?? ''}
+                      onChange={(e) => onRowChange(row.key, 'barras', digits(e.target.value))}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="input input--mono input--sm"
+                      aria-label={`EAN ${row.label}`}
+                      inputMode="numeric"
+                      maxLength={14}
+                      placeholder="EAN"
+                      value={data.ean ?? ''}
+                      onChange={(e) => onRowChange(row.key, 'ean', digits(e.target.value))}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="input input--sm input--price"
+                      aria-label={`Precio ${row.label}`}
+                      inputMode="decimal"
+                      placeholder="—"
+                      value={data.precio ?? ''}
+                      onChange={(e) => onRowChange(row.key, 'precio', price(e.target.value))}
+                    />
+                  </td>
+                  <td>
+                    <RowResult result={result} validationStatus={validationStatus} />
+                  </td>
+                </tr>
+                <tr className={`${rowClass} row--sub`}>
+                  <td colSpan={columns}>
+                    <DescriptionRow row={row} onRowChange={onRowChange} />
+                  </td>
+                </tr>
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+
   return (
     <Card
       title="SKUs a generar"
-      aside={<span className="muted small">{rows.length} {rows.length === 1 ? 'código' : 'códigos'}</span>}
+      aside={
+        <span className="muted small">
+          {rows.length} {rows.length === 1 ? 'código' : 'códigos'}
+        </span>
+      }
     >
       {rows.length === 0 ? (
         <p className="empty">Completá los datos del artículo para ver la propuesta.</p>
+      ) : groups ? (
+        <CollapsibleGroups groups={groups}>{(group) => renderTable(group.rows)}</CollapsibleGroups>
       ) : (
-        <div className="table-wrap">
-          <table className="table table--centered">
-            <thead>
-              <tr>
-                <th>Talle</th>
-                {showSource && <th>Cód. proveedor</th>}
-                <th>SKU propuesto</th>
-                <th className="num">Largo</th>
-                <th>Cód. barras{barcodeRequired ? '' : ' (opc.)'}</th>
-                <th>EAN</th>
-                <th>Precio (opc.)</th>
-                <th>Resultado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const result = resultsByKey[row.key]
-                const data = rowData[row.key] ?? {}
-                const length = row.sku?.length ?? 0
-                const rowClass = result ? `row--${result.status}` : ''
-                return (
-                  <Fragment key={row.key}>
-                  <tr className={`${rowClass} row--main`}>
-                    <td>
-                      <span className="strong">{row.label}</span>
-                      {row.size?.normalized && <span className="size-received">recibido {row.size.raw}</span>}
-                      {row.line && <span className="size-received muted">línea {row.line}</span>}
-                    </td>
-                    {showSource && <td className="mono muted">{row.source}</td>}
-                    <td className="mono strong">
-                      {row.sku ?? <span className="muted small">sin armar</span>}
-                    </td>
-                    <td className={`num mono ${length > MAX_SKU_LENGTH ? 'text-error strong' : ''}`}>{length || '—'}</td>
-                    <td>
-                      <input
-                        className="input input--mono input--sm"
-                        aria-label={`Código de barras ${row.label}`}
-                        inputMode="numeric"
-                        maxLength={14}
-                        placeholder="Código de barras"
-                        value={data.barras ?? ''}
-                        onChange={(e) => onRowChange(row.key, 'barras', digits(e.target.value))}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="input input--mono input--sm"
-                        aria-label={`EAN ${row.label}`}
-                        inputMode="numeric"
-                        maxLength={14}
-                        placeholder="EAN"
-                        value={data.ean ?? ''}
-                        onChange={(e) => onRowChange(row.key, 'ean', digits(e.target.value))}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="input input--sm input--price"
-                        aria-label={`Precio ${row.label}`}
-                        inputMode="decimal"
-                        placeholder="—"
-                        value={data.precio ?? ''}
-                        onChange={(e) => onRowChange(row.key, 'precio', price(e.target.value))}
-                      />
-                    </td>
-                    <td>
-                      <RowResult result={result} validationStatus={validationStatus} />
-                    </td>
-                  </tr>
-                  <tr className={`${rowClass} row--sub`}>
-                    <td colSpan={columns}>
-                      <DescriptionRow row={row} onRowChange={onRowChange} />
-                    </td>
-                  </tr>
-                  </Fragment>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        renderTable(rows)
       )}
     </Card>
   )
@@ -124,9 +135,9 @@ function DescriptionRow({ row, onRowChange }) {
           {tango.length}/{MAX_TANGO_DESCRIPTION}
         </span>
         {tango.edited && (
-          <button type="button" className="link-button" onClick={() => onRowChange(row.key, 'descTango', undefined)}>
+          <LinkButton icon="undo" onClick={() => onRowChange(row.key, 'descTango', undefined)}>
             Restablecer
-          </button>
+          </LinkButton>
         )}
       </label>
       <span className="desc-row__gs1">

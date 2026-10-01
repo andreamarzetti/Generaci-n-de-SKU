@@ -10,6 +10,7 @@ import { altasFileName, downloadAltas } from '../reference/exportReferences'
 import { acceptAltas, ALTA_STATUS, removeAlta } from '../reference/store'
 import { getTarget } from '../reference/targets'
 import { useAltas } from '../reference/useAltas'
+import { LinkButton } from '../components/ui/LinkButton'
 
 const day = (iso) => String(iso ?? '').slice(0, 10)
 
@@ -54,10 +55,10 @@ export function ReferencesPage() {
           title={`Altas creadas por usuarios · ${altas.length}`}
           aside={
             <div className="card__actions">
-              <Button variant="primary" onClick={() => setCreating(true)}>
+              <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
                 Nueva alta
               </Button>
-              <Button onClick={exportExcel} disabled={altas.length === 0}>
+              <Button icon="sheet" onClick={exportExcel} disabled={altas.length === 0}>
                 Exportar a Excel
               </Button>
             </div>
@@ -102,12 +103,12 @@ export function ReferencesPage() {
                         <td>
                           {isPending && (
                             <span className="table-actions">
-                              <button type="button" className="link-button" onClick={() => setAccepting([alta])}>
+                              <LinkButton tone="success" icon="check" onClick={() => setAccepting([alta])}>
                                 Aceptar
-                              </button>
-                              <button type="button" className="link-button" onClick={() => remove(alta.id)}>
+                              </LinkButton>
+                              <LinkButton tone="danger" icon="trash" onClick={() => remove(alta.id)}>
                                 Quitar
-                              </button>
+                              </LinkButton>
                             </span>
                           )}
                         </td>

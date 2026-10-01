@@ -375,7 +375,7 @@ export const ENGINE_GENERAL_RULES = [
   { text: 'Largo máximo 15 caracteres.', status: RULE_STATUS.CONFIRMED, source: SOURCES.TANGO },
   { text: 'Todo en MAYÚSCULAS.', status: RULE_STATUS.CONFIRMED, source: SOURCES.MEETING_18_09 },
   {
-    text: 'Todo SKU debe tener código genérico, de la lista filtrada por marca y familia.',
+    text: 'Todo SKU debe tener código genérico: el SKU genérico de su variante (el mismo SKU sin talle). Sin curva de talles, se elige uno de la lista filtrada por marca y familia.',
     status: RULE_STATUS.CONFIRMED,
     source: SOURCES.FUNCTIONAL_SPEC,
   },

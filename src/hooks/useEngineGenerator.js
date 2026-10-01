@@ -2,9 +2,11 @@ import { useMemo, useRef, useState } from 'react'
 import { ALL_EXISTING_SKUS } from '../data/realData'
 import { nextArticleCode, usedArticleCodes } from '../engines/correlative'
 import { brandHasGenericos, genericosFor, prefixBeforeArticle } from '../engines/engines'
-import { buildEngineProposal, validateEngineRows } from '../engines/proposal'
+import { buildBatchProposal, buildEngineProposal, validateEngineRows } from '../engines/proposal'
 import { pendingAltasUsed } from '../reference/store'
 import { useAltas } from '../reference/useAltas'
+import { genericExists, genericSkuOf } from '../rules/genericSku'
+import { sameSizes, toggleInOrder } from '../rules/variantPlan'
 import { useExternalLoad } from './useExternalLoad'
 
 const LATENCY_MS = 650
@@ -33,6 +35,8 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
   const [descripcion, setDescripcion] = useState('')
   const [genericoKey, setGenericoKey] = useState('')
   const [rowData, setRowData] = useState({})
+  // Carga masiva de varias variantes: { variants: [{ key, descripcion, selections, sizes }], curve }. Null = carga individual.
+  const [batch, setBatch] = useState(null)
   const [validation, setValidation] = useState({ status: 'idle' })
   const [warningsAcknowledged, setWarningsAcknowledged] = useState(false)
   const [lastConfirmation, setLastConfirmation] = useState(null)
@@ -61,16 +65,26 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
 
   // `altas` cambia cuando se crea o acepta un alta: hay que volver a leer los catálogos.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const genericos = useMemo(() => genericosFor(engine, selections), [engine, selections, altas])
+  // En la carga masiva los genéricos salen de la tipología de las variantes (la de la primera).
+  const genericSelections = batch ? (batch.variants[0]?.selections ?? {}) : selections
+  const genericos = useMemo(() => genericosFor(engine, genericSelections), [engine, genericSelections, altas])
   const generico = genericos.find((item) => item.key === genericoKey) ?? null
   // Datos nuevos (sin aceptar) que usa lo armado: bloquean la confirmación.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const pendingAltas = useMemo(() => pendingAltasUsed(engine, effectiveSelections, generico), [engine, effectiveSelections, generico, altas])
+  const pendingAltas = useMemo(() => {
+    const used = batch
+      ? batch.variants.flatMap((variant) => pendingAltasUsed(engine, variant.selections, generico))
+      : pendingAltasUsed(engine, effectiveSelections, generico)
+    return [...new Map(used.map((alta) => [alta.id, alta])).values()]
+  }, [engine, effectiveSelections, generico, altas, batch])
   const hasGenericos = brandHasGenericos(engine)
 
   const proposal = useMemo(
-    () => buildEngineProposal(engine, { selections: effectiveSelections, sizes, descripcion, rowData }),
-    [engine, effectiveSelections, sizes, descripcion, rowData],
+    () =>
+      batch
+        ? buildBatchProposal(engine, { variants: batch.variants, curve: batch.curve, rowData })
+        : buildEngineProposal(engine, { selections: effectiveSelections, sizes, descripcion, rowData }),
+    [engine, effectiveSelections, sizes, descripcion, rowData, batch],
   )
 
   const signature = JSON.stringify([
@@ -84,11 +98,32 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
   const isConfirmed = lastConfirmation?.signature === signature
 
   const canValidate = proposal.rows.length > 0
+  // Los SKU que ya existen se omiten: no se crean ni van al resumen. El genérico ya existente se reutiliza.
+  const omittedKeys = new Set((results ?? []).filter((row) => row.omit).map((row) => row.key))
+  const nothingToCreate = Boolean(results) && proposal.rows.length > 0 && omittedKeys.size === proposal.rows.length
+  // Qué se va a crear al confirmar: lo nuevo, lo que se omite por ya existir y los genéricos (nuevos o reutilizados).
+  const failedKeys = new Set((results ?? []).filter((row) => row.status === 'error').map((row) => row.key))
+  const creationSources = { existingSkus: ALL_EXISTING_SKUS, sessionSkus: new Set(session.skus) }
+  const creation = results
+    ? {
+        // Lo nuevo sin problemas: no se omite y no tiene errores que lo bloqueen.
+        create: proposal.rows.filter((row) => !omittedKeys.has(row.key) && !failedKeys.has(row.key) && row.sku).map((row) => row.sku),
+        omit: proposal.rows.filter((row) => omittedKeys.has(row.key)).map((row) => row.sku),
+        newGenerics: proposal.generics.filter((item) => !genericExists(item.sku, creationSources)).map((item) => item.sku),
+        reusedGenerics: proposal.generics.filter((item) => genericExists(item.sku, creationSources)).map((item) => item.sku),
+        blocked: summary.error,
+      }
+    : null
   const canConfirm =
-    Boolean(results) && summary.error === 0 && (summary.warn === 0 || warningsAcknowledged) && !isConfirmed && pendingAltas.length === 0
+    Boolean(results) &&
+    summary.error === 0 &&
+    (summary.warn === 0 || warningsAcknowledged) &&
+    !isConfirmed &&
+    pendingAltas.length === 0 &&
+    !nothingToCreate
 
   const stages = {
-    data: (Boolean(generico) || !hasGenericos) && proposal.issues.length === 0 && proposal.rows.length > 0,
+    data: (Boolean(generico) || !hasGenericos || proposal.generics.length > 0) && proposal.issues.length === 0 && proposal.rows.length > 0,
     proposal: proposal.rows.length > 0 && proposal.rows.every((row) => row.sku),
     validation: results ? (summary.error === 0 ? 'ok' : 'error') : validation.status === 'running' ? 'running' : 'pending',
     confirmation: isConfirmed,
@@ -119,7 +154,41 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
   }
 
   const setArticleCode = (value) => {
-    setArticleManual(value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 2))
+    setArticleManual(
+      value
+        .toUpperCase()
+        .replace(/[^0-9A-Z]/g, '')
+        .slice(0, 2),
+    )
+    touch()
+  }
+
+  // Orden de la tabla de talles del motor (con "Sin talle" al final).
+  const sizeOrder = [...engine.sizes.map((size) => size.code), ...(engine.allowNoSize ? [''] : [])]
+  const updateBatch = (change) => {
+    setBatch((prev) => (prev ? change(prev) : prev))
+    touch()
+  }
+  const toggleBatchCurve = (code) => updateBatch((prev) => ({ ...prev, curve: toggleInOrder(prev.curve, code, sizeOrder) }))
+  const setBatchVariantSizes = (key, sizes) =>
+    updateBatch((prev) => ({
+      ...prev,
+      variants: prev.variants.map((variant) =>
+        variant.key === key ? { ...variant, sizes: sameSizes(sizes, prev.curve) ? null : sizes } : variant,
+      ),
+    }))
+  const resetBatchVariant = (key) =>
+    updateBatch((prev) => ({
+      ...prev,
+      variants: prev.variants.map((variant) => (variant.key === key ? { ...variant, sizes: null } : variant)),
+    }))
+  const removeBatchVariant = (key) => {
+    const variants = batch ? batch.variants.filter((variant) => variant.key !== key) : []
+    setBatch(variants.length ? { ...batch, variants } : null)
+    touch()
+  }
+  const exitBatch = () => {
+    setBatch(null)
     touch()
   }
 
@@ -139,7 +208,12 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
 
   // Carga desde "Pegar solicitud": lo que no se puede deducir del mail queda para elegir.
   const hasData =
-    Object.values(selections).some(Boolean) || sizes.length > 0 || Boolean(descripcion) || Boolean(genericoKey) || Object.keys(rowData).length > 0
+    Object.values(selections).some(Boolean) ||
+    sizes.length > 0 ||
+    Boolean(descripcion) ||
+    Boolean(genericoKey) ||
+    Object.keys(rowData).length > 0 ||
+    Boolean(batch)
 
   useExternalLoad(loadRequest, {
     applies: (request) => request.target === 'engine' && request.engineId === engine.id,
@@ -153,6 +227,7 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
       setDescripcion(payload.descripcion.toUpperCase())
       setGenericoKey(payload.genericoKey)
       setRowData(payload.rowData)
+      setBatch(payload.batch ?? null)
       setLastConfirmation(null)
       requestId.current += 1
       setValidation({ status: 'idle' })
@@ -170,6 +245,7 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
     setDescripcion('')
     setGenericoKey('')
     setRowData({})
+    setBatch(null)
     requestId.current += 1
     setValidation({ status: 'idle' })
     setWarningsAcknowledged(false)
@@ -188,26 +264,32 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
 
   const confirm = () => {
     if (!canConfirm) return
-    const genericItems = proposal.generics.map((item) => ({
+    const sources = { existingSkus: ALL_EXISTING_SKUS, sessionSkus: new Set(session.skus) }
+    const toCreate = proposal.rows.filter((row) => !omittedKeys.has(row.key))
+    const genericItems = proposal.generics.filter((item) => !genericExists(item.sku, sources)).map((item) => ({
       sku: item.sku,
       ean: '',
       descTango: item.descripcion,
       talle: '',
       precio: '',
-      generico: generico?.codigo ?? '',
+      generico: item.sku,
+      clasificacion: generico?.codigo ?? '',
       esGenerico: true,
     }))
-    const items = proposal.rows.map((row) => ({
+    const items = toCreate.map((row) => ({
       sku: row.sku,
       ean: onlyDigits(rowData[row.key]?.ean),
       descTango: row.descripcion,
       talle: row.size.code ? row.label : '',
       precio: '',
-      generico: generico?.codigo ?? '',
+      // Los SKU de la curva pertenecen a su SKU genérico (el mismo SKU sin talle).
+      generico: genericSkuOf(row.sku) ?? generico?.codigo ?? '',
+      clasificacion: generico?.codigo ?? '',
     }))
     const all = [...genericItems, ...items]
     onConfirmed(all)
-    setLastConfirmation({ signature, items: all, familyLabel: `${brandLabel} ${engine.label}`, at: new Date() })
+    const omitted = proposal.rows.filter((row) => omittedKeys.has(row.key)).map((row) => row.sku)
+    setLastConfirmation({ signature, items: all, omitted, familyLabel: `${brandLabel} ${engine.label}`, at: new Date() })
   }
 
   const startNew = () => {
@@ -236,7 +318,11 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
     warningsAcknowledged,
     canValidate,
     canConfirm,
+    nothingToCreate,
+    creation,
     pendingAltas,
+    batch,
+    sizeOrder,
     pendingSkus: proposal.rows.map((row) => row.sku).filter(Boolean),
     isConfirmed,
     lastConfirmation,
@@ -246,6 +332,11 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
       chooseArticleMode,
       setArticleCode,
       toggleSize,
+      toggleBatchCurve,
+      setBatchVariantSizes,
+      resetBatchVariant,
+      removeBatchVariant,
+      exitBatch,
       setDescripcion: (value) => {
         setDescripcion(value.toUpperCase())
         touch()

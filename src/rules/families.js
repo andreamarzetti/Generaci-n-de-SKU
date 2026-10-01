@@ -197,7 +197,11 @@ export const GENERAL_RULES = [
     status: CONFIRMED,
     source: SOURCES.SIZE_TABLE,
   },
-  { text: 'Todo SKU debe tener código genérico asociado.', status: CONFIRMED, source: SOURCES.FUNCTIONAL_SPEC },
+  {
+    text: 'Todo SKU debe tener código genérico: el SKU genérico de su variante (el mismo SKU sin talle). Sin curva de talles, se elige uno de la lista.',
+    status: CONFIRMED,
+    source: SOURCES.FUNCTIONAL_SPEC,
+  },
   {
     text: 'SKU genérico: el mismo SKU sin el talle (.S, .M, .XL…). Se da de alta uno por variante, además de un SKU por talle.',
     status: CONFIRMED,

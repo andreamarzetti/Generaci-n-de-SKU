@@ -121,15 +121,18 @@ describe('f) 921', () => {
     expect(decomposeSku(ENGINES.producto921, '92161110102.S').values).toMatchObject({ marca: '921', familia: '6' })
   })
 
-  it('921 genera con advertencia de genéricos', () => {
-    const proposal = buildEngineProposal(ENGINES.producto921, {
-      selections: { familia: '6', tipologia: '11', genero: '1', articulo: '01', color: '02' },
-      sizes: ['.S'],
-    })
+  it('921 con curva de talles: el genérico es el SKU sin talle; sin curva, advierte que no hay genéricos cargados', () => {
+    const selections = { familia: '6', tipologia: '11', genero: '1', articulo: '01', color: '02' }
+    const proposal = buildEngineProposal(ENGINES.producto921, { selections, sizes: ['.S'] })
     expect(proposal.rows[0].sku).toBe('92161110102.S')
     const [result] = validateEngineRows({ engine: ENGINES.producto921, proposal })
-    expect(result.checks.generico.status).toBe('warn')
-    expect(result.checks.duplicate.status).toBe('error')
+    expect(result.checks.generico).toEqual({ status: 'ok', message: 'SKU genérico 92161110102' })
+    // Ya existe en los datos reales: no bloquea, se avisa y se omite su creación.
+    expect(result.checks.duplicate).toEqual({ status: 'warn', message: 'SKU ya existente: se omitirá su creación', omit: true })
+    expect(result.omit).toBe(true)
+
+    const single = buildEngineProposal(ENGINES.producto921, { selections, sizes: ['.TU'] })
+    expect(validateEngineRows({ engine: ENGINES.producto921, proposal: single })[0].checks.generico.status).toBe('warn')
   })
 })
 
@@ -158,14 +161,14 @@ describe('correlativo de artículo', () => {
 })
 
 describe('validaciones comunes', () => {
-  it('un SKU existente de otra marca marca duplicado', () => {
+  it('un SKU existente de otra marca se avisa y se omite su creación', () => {
     const proposal = buildEngineProposal(ENGINES.cascosMAC, {
       selections: { tipologia: '93', calota: '907', grafica: '00', color: '01' },
       sizes: ['.TU'],
       descripcion: 'VISOR',
     })
     const [result] = validateEngineRows({ engine: ENGINES.cascosMAC, proposal, generico: { codigo: 'X' } })
-    expect(result.checks.duplicate).toEqual({ status: 'error', message: 'Ya existe en los artículos reales' })
+    expect(result.checks.duplicate).toEqual({ status: 'warn', message: 'SKU ya existente: se omitirá su creación', omit: true })
   })
 
   it('EAN opcional: vacío no aplica; con dígito verificador inválido es error', () => {
@@ -179,13 +182,16 @@ describe('validaciones comunes', () => {
     expect(medium.checks.ean).toEqual({ status: 'error', message: 'Dígito verificador inválido' })
   })
 
-  it('sin genérico en una marca con genéricos es bloqueante', () => {
-    const proposal = buildEngineProposal(ENGINES.cascosGUD, {
-      selections: { tipologia: '92', grafica: '03', acabado: '01', color: '00' },
-      sizes: ['.S'],
-    })
-    const [result] = validateEngineRows({ engine: ENGINES.cascosGUD, proposal })
+  it('sin curva de talles y sin genérico de la lista, en una marca con genéricos, es bloqueante', () => {
+    const selections = { tipologia: '92', grafica: '03', acabado: '01', color: '00' }
+    const single = buildEngineProposal(ENGINES.cascosGUD, { selections, sizes: ['.TU'] })
+    const [result] = validateEngineRows({ engine: ENGINES.cascosGUD, proposal: single })
     expect(result.checks.generico).toEqual({ status: 'error', message: 'Sin código genérico' })
+
+    // Con curva de talles no hace falta elegirlo: el genérico es el SKU sin talle.
+    const curve = buildEngineProposal(ENGINES.cascosGUD, { selections, sizes: ['.S', '.M'] })
+    const results = validateEngineRows({ engine: ENGINES.cascosGUD, proposal: curve })
+    results.forEach((row) => expect(row.checks.generico).toEqual({ status: 'ok', message: 'SKU genérico GUD92030100' }))
   })
 
   it('la pantalla ofrece las 7 marcas en orden', () => {

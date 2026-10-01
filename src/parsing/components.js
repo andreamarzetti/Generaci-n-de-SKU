@@ -215,6 +215,12 @@ export function applyChoices(parts, choices = {}) {
   })
 }
 
+/** Elecciones del usuario para una descripción (cada variante tiene las suyas). */
+export const choicesFor = (draft, description) => draft.choices?.[description] ?? {}
+
+/** Partes que hacen falta para armar el SKU de un casco. */
+export const REQUIRED_PARTS = ['tipologia', 'calota', 'grafica', 'color']
+
 /** Códigos listos para cargar en el motor: solo lo que quedó resuelto (encontrado o deducido). */
 export function selectionsFromParts(parts) {
   return Object.fromEntries(

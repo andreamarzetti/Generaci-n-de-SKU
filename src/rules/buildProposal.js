@@ -208,29 +208,67 @@ function withDescriptions(row, rowData) {
   }
 }
 
+/** Detalle del talle de una fila de LS2; si se recibió con otro nombre (XXL), se aclara. */
+function sizeDetail(row) {
+  if (!row?.size?.recognized) return null
+  const received = row.size.normalized ? ` (recibido ${row.size.raw})` : ''
+  return { title: 'Talle', text: `${row.size.value}${received}`, plain: true }
+}
+
 /** Segmentos del SKU de una fila para mostrar su composición (por defecto, la primera). */
 export function proposalSegments(family, proposal, first = proposal.rows[0]) {
   const size = first?.size?.recognized ? `.${first.size.value}` : ''
   if (family.scheme === 'cascos') {
     const group = proposal.groups?.find((item) => item.key === first?.groupKey)
     return [
-      { id: 'marca', label: 'Prefijo', value: BRAND_PREFIX, variant: 'brand' },
-      { id: 'barras', label: 'Cód. barras · 7', value: group?.prefix ?? '', size: 7, variant: 'code' },
-      { id: 'libres', label: 'Libres · 2', value: group?.freeDigit ?? '', size: 2, variant: 'free', pending: true },
-      { id: 'talle', label: 'Talle', value: size, size: 3, variant: 'size' },
+      { id: 'marca', label: 'Prefijo', value: BRAND_PREFIX, variant: 'brand', detail: { title: 'Marca', text: 'LS2' } },
+      {
+        id: 'barras',
+        label: 'Cód. barras · 7',
+        value: group?.prefix ?? '',
+        size: 7,
+        variant: 'code',
+        detail: { title: 'Código de barras', text: 'Primeros 7 dígitos del código de barras (a veces llamado sinónimo).', plain: true },
+      },
+      {
+        id: 'libres',
+        label: 'Libres · 2',
+        value: group?.freeDigit ?? '',
+        size: 2,
+        variant: 'free',
+        pending: true,
+        detail: { title: 'Dígitos libres', text: 'Par que no esté usado con ese prefijo: 01–99 y luego A1…A0, B1… (alfanumérico).', plain: true },
+      },
+      { id: 'talle', label: 'Talle', value: size, size: 3, variant: 'size', detail: sizeDetail(first) },
     ]
   }
   if (family.scheme === 'talleSufijo' || family.scheme === 'calzado') {
     return [
-      { id: 'marca', label: 'Prefijo', value: BRAND_PREFIX, variant: 'brand' },
-      { id: 'codigo', label: 'Cód. proveedor sin letras', value: first?.base ?? '', size: 9, variant: 'code' },
-      { id: 'talle', label: 'Talle', value: size, size: 3, variant: 'size' },
+      { id: 'marca', label: 'Prefijo', value: BRAND_PREFIX, variant: 'brand', detail: { title: 'Marca', text: 'LS2' } },
+      {
+        id: 'codigo',
+        label: 'Cód. proveedor sin letras',
+        value: first?.base ?? '',
+        size: 9,
+        variant: 'code',
+        detail: { title: 'Código del proveedor', text: 'Dígitos del código que envía LS2, sin las letras intermedias ni el talle final.', plain: true },
+      },
+      { id: 'talle', label: 'Talle', value: size, size: 3, variant: 'size', detail: sizeDetail(first) },
     ]
   }
   const segments = [
-    { id: 'marca', label: 'Prefijo', value: BRAND_PREFIX, variant: 'brand' },
-    { id: 'codigo', label: 'Cód. proveedor', value: first?.source ?? '', size: 8, variant: 'code' },
+    { id: 'marca', label: 'Prefijo', value: BRAND_PREFIX, variant: 'brand', detail: { title: 'Marca', text: 'LS2' } },
+    {
+      id: 'codigo',
+      label: 'Cód. proveedor',
+      value: first?.source ?? '',
+      size: 8,
+      variant: 'code',
+      detail: { title: 'Código del proveedor', text: 'Tal como lo envía LS2.', plain: true },
+    },
   ]
-  if (family.scheme === 'talleUnico') segments.push({ id: 'sufijo', label: 'Talle único', value: '.TU', variant: 'size' })
+  if (family.scheme === 'talleUnico') {
+    segments.push({ id: 'sufijo', label: 'Talle único', value: '.TU', variant: 'size', detail: { title: 'Talle', text: 'Talle único (TU).', plain: true } })
+  }
   return segments
 }

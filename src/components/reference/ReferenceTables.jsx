@@ -92,10 +92,10 @@ export function ReferenceTables() {
       title="Tablas de referencia"
       aside={
         <div className="card__actions">
-          <Button variant="primary" onClick={() => setAdding(true)} disabled={!scopeReady}>
+          <Button variant="primary" icon="plus" onClick={() => setAdding(true)} disabled={!scopeReady}>
             Agregar a esta tabla
           </Button>
-          <Button onClick={exportTable} disabled={records.length === 0}>
+          <Button icon="sheet" onClick={exportTable} disabled={records.length === 0}>
             Exportar esta tabla
           </Button>
         </div>

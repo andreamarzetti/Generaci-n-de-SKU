@@ -3,6 +3,7 @@ import { createAlta } from '../../reference/store'
 import { getTarget, KINDS, suggestCode, targetsOfKind } from '../../reference/targets'
 import { Button } from '../ui/Button'
 import { Field } from '../ui/Field'
+import { LinkButton } from '../ui/LinkButton'
 
 const DEFAULT_TARGET = 'calota-UBX'
 
@@ -116,9 +117,8 @@ export function AltaForm({ initial = {}, lockTarget = false, onSaved, onCancel, 
                 />
               )}
               {field.name === 'codigo' && suggested && values.codigo !== suggested && (
-                <button type="button" className="link-button" onClick={() => setValue('codigo', suggested)}>
-                  Usar el siguiente libre: {suggested}
-                </button>
+                <LinkButton icon="plus" onClick={() => setValue('codigo', suggested)}>
+                  Usar el siguiente libre: {suggested} </LinkButton>
               )}
             </Field>
           )
@@ -131,10 +131,14 @@ export function AltaForm({ initial = {}, lockTarget = false, onSaved, onCancel, 
       </p>
 
       <div className="alta-form__actions">
-        <Button variant="primary" type="submit">
+        <Button variant="success" icon="save" type="submit">
           Guardar alta
         </Button>
-        {onCancel && <Button onClick={onCancel}>Cancelar</Button>}
+        {onCancel && (
+          <Button icon="close" onClick={onCancel}>
+            Cancelar
+          </Button>
+        )}
       </div>
     </form>
   )

@@ -55,10 +55,18 @@ FF313_AVA_ARCANO_GLOSS_BLACK_GRADIENT_RED_YELLOW`}</pre>
         </li>
         <li>Los guiones bajos se leen como espacios: la descripción queda “FF313 AVA ARCANO GLOSS BLACK PINK”.</li>
         <li>
-          Con varias variantes se carga <strong>una por vez</strong>: elegís cuál con «Usar», cargás, generás los SKU y repetís
-          con la siguiente.
+          Se marcan <strong>una o varias</strong> variantes (o «Seleccionar todas»). Con una se carga como siempre; con más de una se cargan
+          <strong> juntas en la carga masiva</strong>.
         </li>
-        <li>Este formato no trae talles, barras ni EAN: se agregan a mano en la revisión.</li>
+        <li>
+          En la carga masiva se elige <strong>una curva de talles para todas</strong>. Para cambiar los talles de una variante en
+          particular se usa «Editar talles» (queda como «Talles propios»; «Usar la curva» la vuelve a igualar a las demás).
+        </li>
+        <li>
+          Para cargarlas juntas, cada variante tiene que tener resueltas la tipología, la calota, la gráfica y el color (existentes o
+          creados). Hoy aplica a cascos de MAC, URBAX y marcas nuevas de cascos, y a cascos de LS2.
+        </li>
+        <li>Este formato no trae talles, barras ni EAN: los talles se eligen en la curva y el código de barras y el EAN se completan por SKU.</li>
         <li>Se asume un solo modelo por solicitud.</li>
       </ul>
 

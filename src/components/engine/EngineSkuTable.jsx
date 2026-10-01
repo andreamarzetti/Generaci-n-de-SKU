@@ -1,6 +1,7 @@
 import { MAX_SKU_LENGTH } from '../../rules/constants'
 import { Badge } from '../ui/Badge'
 import { Card } from '../ui/Card'
+import { CollapsibleGroups, groupByVariant } from '../ui/CollapsibleGroups'
 import { STATUS_META } from '../ui/status'
 
 const digits = (value) => value.replace(/\D/g, '')
@@ -8,65 +9,78 @@ const digits = (value) => value.replace(/\D/g, '')
 /** SKUs a generar con un motor: EAN opcional y descripción manual por fila. */
 export function EngineSkuTable({ rows, rowData, results, onRowChange, validationStatus }) {
   const resultsByKey = Object.fromEntries((results ?? []).map((result) => [result.key, result]))
+  const groups = groupByVariant(rows, { resultsByKey })
+  const isBatch = rows.some((row) => row.variant) && !groups
+  const renderTable = (list) => (
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            {isBatch && <th>Variante</th>}
+            <th>Talle</th>
+            <th>SKU propuesto</th>
+            <th className="num">Largo</th>
+            <th>EAN (opc.)</th>
+            <th>Descripción (manual)</th>
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((row) => {
+            const result = resultsByKey[row.key]
+            const length = row.sku?.length ?? 0
+            return (
+              <tr key={row.key} className={[result ? `row--${result.status}` : '', result?.omit ? 'row--omit' : ''].join(' ')}>
+                {isBatch && <td className="mono small">{row.variant}</td>}
+                <td className="strong">{row.label}</td>
+                <td className="mono strong">{row.sku ?? <span className="muted small">sin armar</span>}</td>
+                <td className={`num mono ${length > MAX_SKU_LENGTH ? 'text-error strong' : ''}`}>{length || '—'}</td>
+                <td>
+                  <input
+                    className="input input--mono input--sm"
+                    aria-label={`EAN ${row.variant ? `${row.variant} ` : ''}${row.label}`}
+                    inputMode="numeric"
+                    maxLength={14}
+                    placeholder="EAN"
+                    value={rowData[row.key]?.ean ?? ''}
+                    onChange={(e) => onRowChange(row.key, 'ean', digits(e.target.value))}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="input input--sm desc-row__input"
+                    aria-label={`Descripción ${row.variant ? `${row.variant} ` : ''}${row.label}`}
+                    placeholder="Descripción"
+                    value={row.descripcion}
+                    onChange={(e) => onRowChange(row.key, 'descripcion', e.target.value.toUpperCase())}
+                  />
+                </td>
+                <td>
+                  <RowResult result={result} validationStatus={validationStatus} />
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
 
   return (
     <Card
       title="SKUs a generar"
-      aside={<span className="muted small">{rows.length} {rows.length === 1 ? 'código' : 'códigos'}</span>}
+      aside={
+        <span className="muted small">
+          {rows.length} {rows.length === 1 ? 'código' : 'códigos'}
+        </span>
+      }
     >
       {rows.length === 0 ? (
         <p className="empty">Elegí los segmentos y al menos un talle para ver la propuesta.</p>
+      ) : groups ? (
+        <CollapsibleGroups groups={groups}>{(group) => renderTable(group.rows)}</CollapsibleGroups>
       ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Talle</th>
-                <th>SKU propuesto</th>
-                <th className="num">Largo</th>
-                <th>EAN (opc.)</th>
-                <th>Descripción (manual)</th>
-                <th>Resultado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const result = resultsByKey[row.key]
-                const length = row.sku?.length ?? 0
-                return (
-                  <tr key={row.key} className={result ? `row--${result.status}` : ''}>
-                    <td className="strong">{row.label}</td>
-                    <td className="mono strong">{row.sku ?? <span className="muted small">sin armar</span>}</td>
-                    <td className={`num mono ${length > MAX_SKU_LENGTH ? 'text-error strong' : ''}`}>{length || '—'}</td>
-                    <td>
-                      <input
-                        className="input input--mono input--sm"
-                        aria-label={`EAN ${row.label}`}
-                        inputMode="numeric"
-                        maxLength={14}
-                        placeholder="EAN"
-                        value={rowData[row.key]?.ean ?? ''}
-                        onChange={(e) => onRowChange(row.key, 'ean', digits(e.target.value))}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="input input--sm desc-row__input"
-                        aria-label={`Descripción ${row.label}`}
-                        placeholder="Descripción"
-                        value={row.descripcion}
-                        onChange={(e) => onRowChange(row.key, 'descripcion', e.target.value.toUpperCase())}
-                      />
-                    </td>
-                    <td>
-                      <RowResult result={result} validationStatus={validationStatus} />
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        renderTable(rows)
       )}
     </Card>
   )

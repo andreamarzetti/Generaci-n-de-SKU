@@ -4,7 +4,7 @@
 export const DUN_PENDING = 'Pendiente (GS1)'
 
 export const SUMMARY_COLUMNS = ['SKU', 'Descripción Tango', 'EAN', 'Código genérico', 'DUN']
-export const XLSX_COLUMNS = ['SKU', 'Descripción', 'EAN', 'Código genérico', 'Talle', 'Precio']
+export const XLSX_COLUMNS = ['SKU', 'Descripción', 'EAN', 'Código genérico', 'Talle', 'Precio', 'Clasificación']
 
 export function summaryRows(items) {
   return items.map((item) => [item.sku, item.descTango, item.ean, item.generico ?? '', DUN_PENDING])
@@ -16,7 +16,7 @@ export function summaryTsv(items) {
 }
 
 export function xlsxRows(items) {
-  return items.map((item) => [item.sku, item.descTango, item.ean, item.generico ?? '', item.talle ?? '', item.precio ?? ''])
+  return items.map((item) => [item.sku, item.descTango, item.ean, item.generico ?? '', item.talle ?? '', item.precio ?? '', item.clasificacion ?? ''])
 }
 
 /** Descarga el lote como .xlsx con una hoja "Artículos". La librería se carga solo al usarla. */
@@ -26,6 +26,6 @@ export async function downloadXlsx(items, fileName) {
   const body = xlsxRows(items).map((row) => row.map((value) => ({ value: String(value), type: String })))
   await writeExcelFile([header, ...body], {
     sheet: 'Artículos',
-    columns: [{ width: 18 }, { width: 34 }, { width: 16 }, { width: 18 }, { width: 8 }, { width: 10 }],
+    columns: [{ width: 18 }, { width: 34 }, { width: 16 }, { width: 18 }, { width: 8 }, { width: 10 }, { width: 18 }],
   }).toFile(fileName)
 }

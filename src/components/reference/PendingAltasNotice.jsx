@@ -22,7 +22,7 @@ export function PendingAltasNotice({ altas, skus }) {
             .join(' · ')}
         </p>
       </div>
-      <Button variant="primary" onClick={() => setOpen(true)}>
+      <Button variant="success" icon="checkCircle" onClick={() => setOpen(true)}>
         Revisar y aceptar
       </Button>
       {open && (

@@ -1,9 +1,22 @@
 import { ALL_EXISTING_EANS, ALL_EXISTING_SKUS } from '../data/realData'
-import { checkGenericExists, genericSkus } from '../rules/genericSku'
+import { checkGenericExists, genericSkuOf, genericSkus } from '../rules/genericSku'
+import { effectiveSizes, planRowKey } from '../rules/variantPlan'
 import { CHECKS, checkDuplicate, checkEan, checkLength } from '../rules/validateRows'
-import { brandHasGenericos, decomposeSku } from './engines'
+import { BRANDS, brandHasGenericos, decomposeSku } from './engines'
 
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
+
+/**
+ * Qué significa el código de un segmento (para el mensaje al pasar el mouse): "10" → Tipología: FF SV.
+ * `text` es null si el código no tiene descripción en la tabla; `alta` marca los datos nuevos.
+ */
+function segmentDetail(engine, segment, selections, value) {
+  if (!value) return null
+  if (segment.fixed) return { title: segment.label, text: BRANDS.find((brand) => brand.id === engine.brand)?.label ?? value }
+  const options = segment.article ? segment.lines.flatMap((line) => line.items) : segment.getOptions(selections)
+  const option = options.find((item) => item.code === value)
+  return { title: segment.label, text: option?.label ?? null, alta: option?.alta }
+}
 
 /** Valor de cada segmento: fijo o elegido. */
 export function segmentValue(segment, selections) {
@@ -44,13 +57,55 @@ export function buildEngineProposal(engine, { selections = {}, sizes = [], descr
       value: segmentValue(segment, selections),
       size: segment.length,
       variant: segment.fixed ? 'brand' : segment.article ? 'free' : 'code',
+      detail: segmentDetail(engine, segment, selections, segmentValue(segment, selections)),
     })),
-    { id: 'talle', label: 'Talle', value: sizes[0] ?? '', size: 3, variant: 'size' },
+    { id: 'talle', label: 'Talle', value: sizes[0] ?? '', size: 3, variant: 'size', detail: sizes[0] ? { title: 'Talle', text: sizes[0].slice(1), plain: true } : null },
   ]
 
   // El genérico es el SKU sin talle; su descripción es la del artículo (sin talle).
   const generics = genericSkus(rows, () => descripcion.toUpperCase())
   return { rows, issues, segments, groups: [], generics }
+}
+
+/** El segmento de talle de una fila: su valor y su detalle. */
+const withSize = (segment, row) => ({
+  ...segment,
+  value: row.size.code,
+  detail: row.size.code ? { title: 'Talle', text: row.label, plain: true } : null,
+})
+
+/**
+ * Propuesta de varias variantes juntas (carga masiva): cada variante tiene sus propios segmentos y talles
+ * (los suyos o la curva de todas). Las filas llevan la clave "variante|talle" y su variante.
+ * @param variants [{ key, descripcion, selections, sizes: string[] | null }]
+ * @param curve    talles de las variantes que no tienen los suyos
+ */
+export function buildBatchProposal(engine, { variants = [], curve = [], rowData = {} } = {}) {
+  const parts = variants.map((variant) => {
+    const sizes = effectiveSizes(variant, curve)
+    // La descripción editada de una fila se guarda con la clave completa; el armado por variante la espera por talle.
+    const scoped = Object.fromEntries(
+      sizes.flatMap((code) => {
+        const data = rowData[planRowKey(variant.key, code)]
+        return data ? [[code || 'SIN_TALLE', data]] : []
+      }),
+    )
+    return { variant, proposal: buildEngineProposal(engine, { selections: variant.selections, sizes, descripcion: variant.descripcion, rowData: scoped }) }
+  })
+
+  const rows = parts.flatMap(({ variant, proposal }) =>
+    proposal.rows.map((row) => ({
+      ...row,
+      key: planRowKey(variant.key, row.size.code),
+      variantKey: variant.key,
+      variant: variant.descripcion,
+      segments: proposal.segments.map((segment) => (segment.id === 'talle' ? withSize(segment, row) : segment)),
+    })),
+  )
+  const generics = [...new Map(parts.flatMap(({ proposal }) => proposal.generics).map((item) => [item.sku, item])).values()]
+  const issues = variants.length === 0 ? ['No hay variantes para cargar.'] : parts.flatMap(({ variant, proposal }) => proposal.issues.map((issue) => `${variant.descripcion}: ${issue}`))
+
+  return { rows, issues, segments: parts[0]?.proposal.segments ?? buildEngineProposal(engine).segments, groups: [], generics, batch: true }
 }
 
 /** Controles de los motores: los mismos que LS2, salvo código de barras y precio (solo LS2). */
@@ -59,7 +114,7 @@ export const ENGINE_CHECKS = [
   { id: 'duplicate', label: 'SKU duplicado', description: 'Lote, artículos existentes de todas las marcas y sesión', source: 'Datos reales · mock' },
   { id: 'ean', label: 'EAN', description: 'Opcional; si se carga, 13 dígitos, verificador GS1 y sin repetir', source: 'GS1 + datos reales · mock' },
   { id: 'size', label: 'Talle', description: 'Tabla de talles del motor', source: 'Hojas de referencia' },
-  { id: 'generico', label: 'Código genérico', description: 'Obligatorio, filtrado por marca y familia', source: 'Especificación Funcional' },
+  { id: 'generico', label: 'Código genérico', description: 'El SKU genérico (el mismo SKU sin talle) agrupa la curva; sin curva se elige de la lista', source: 'Especificación Funcional' },
   { id: 'description', label: 'Descripción', description: 'Manual en esta etapa (a validar)', source: 'Carga del alta' },
   CHECKS.find((check) => check.id === 'synonym'),
 ]
@@ -88,7 +143,8 @@ function countBy(values) {
 export function engineRowSegments(proposal) {
   return proposal.rows.map((row) => ({
     row,
-    segments: proposal.segments.map((segment) => (segment.id === 'talle' ? { ...segment, value: row.size.code } : segment)),
+    // En la carga masiva cada variante trae sus propios segmentos.
+    segments: row.segments ?? proposal.segments.map((segment) => (segment.id === 'talle' ? withSize(segment, row) : segment)),
   }))
 }
 
@@ -117,25 +173,26 @@ export function validateEngineRows({
           ? ok('Respeta la estructura')
           : error('No respeta la estructura del motor')
         : error(row.buildError ?? 'No se pudo armar el SKU'),
-      duplicate: withGenericWarning(
-        withBrandNeutralMessage(checkDuplicate(row.sku, { existingSkus, sessionSkus, skuCounts })),
-        row.sku,
-        { existingSkus, sessionSkus },
-      ),
+      duplicate: withGenericWarning(checkDuplicate(row.sku, { existingSkus, sessionSkus, skuCounts }), row.sku, { existingSkus, sessionSkus }),
       ean: ean ? checkEan(ean, { existingEans, sessionEans, eanCounts }) : notApplicable('Opcional'),
       size: row.size.known
         ? ok(row.size.code ? row.label : 'Sin talle')
         : error(`"${row.size.code}" no está en la tabla de talles`),
-      generico: generico
-        ? ok(generico.codigo)
-        : hasGenericos
-          ? error('Sin código genérico')
-          : warn('La marca no tiene genéricos cargados (a validar)'),
+      // Con curva de talles, el genérico es el propio SKU sin talle; sin curva, se elige de la lista.
+      generico: genericSkuOf(row.sku)
+        ? ok(`SKU genérico ${genericSkuOf(row.sku)}`)
+        : generico
+          ? ok(generico.codigo)
+          : hasGenericos
+            ? error('Sin código genérico')
+            : warn('La marca no tiene genéricos cargados (a validar)'),
       description: row.descripcion ? ok(`${row.descripcion.length} caracteres`) : warn('Sin descripción'),
       synonym: pending('Pendiente de definición'),
     }
+    // Una fila que se omite no se crea: lo demás (EAN, descripción…) ya no la puede bloquear.
+    const omit = checks.duplicate.omit === true
     const statuses = Object.values(checks).map((check) => check.status)
-    const status = statuses.includes('error') ? 'error' : statuses.includes('warn') ? 'warn' : 'ok'
-    return { key: row.key, sku: row.sku, checks, status }
+    const status = omit ? 'warn' : statuses.includes('error') ? 'error' : statuses.includes('warn') ? 'warn' : 'ok'
+    return { key: row.key, sku: row.sku, checks, status, omit }
   })
 }

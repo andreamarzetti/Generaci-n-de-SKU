@@ -81,3 +81,112 @@ describe('SKU genérico = el mismo SKU sin el talle', () => {
     expect(engineResult.checks.duplicate.status).toBe('warn')
   })
 })
+
+describe('código genérico de una curva de talles (UBX1031322I7)', () => {
+  const SELECTIONS = { tipologia: '10', calota: '313', grafica: '22', color: 'I7' }
+  const CURVE = ['.XS', '.S', '.M', '.L', '.XL', '.2X']
+
+  it('los SKU de la curva pertenecen al genérico UBX1031322I7: no hace falta elegir otro de la lista', () => {
+    const proposal = buildEngineProposal(ENGINES.cascosUBX, { selections: SELECTIONS, sizes: CURVE })
+    expect(proposal.rows.map((row) => row.sku)).toEqual([
+      'UBX1031322I7.XS',
+      'UBX1031322I7.S',
+      'UBX1031322I7.M',
+      'UBX1031322I7.L',
+      'UBX1031322I7.XL',
+      'UBX1031322I7.2X',
+    ])
+    expect(proposal.generics.map((item) => item.sku)).toEqual(['UBX1031322I7'])
+
+    // Sin elegir nada de la lista (generico = null), ya no sale "Sin código genérico".
+    const results = validateEngineRows({ engine: ENGINES.cascosUBX, proposal, generico: null, existingSkus: new Set(), existingEans: new Map() })
+    results.forEach((row) => expect(row.checks.generico).toEqual({ status: 'ok', message: 'SKU genérico UBX1031322I7' }))
+  })
+
+  it('los talles que ya existen se omiten (no bloquean) y solo se crea el que falta', () => {
+    const proposal = buildEngineProposal(ENGINES.cascosUBX, { selections: SELECTIONS, sizes: CURVE })
+    // En los datos reales existen S, M, L, XL y 2X de esta variante; XS no.
+    const results = validateEngineRows({ engine: ENGINES.cascosUBX, proposal, generico: null })
+    const size = (row) => row.sku.split('.')[1]
+    expect(Object.fromEntries(results.map((row) => [size(row), row.omit]))).toEqual({ XS: false, S: true, M: true, L: true, XL: true, '2X': true })
+    expect(results[1].checks.duplicate).toEqual({ status: 'warn', message: 'SKU ya existente: se omitirá su creación', omit: true })
+    // Nada bloquea: todas son advertencias, ninguna es error.
+    expect(results.every((row) => row.status === 'warn')).toBe(true)
+    // XS está libre, pero su genérico ya existe en la curva: se avisa que se reutiliza.
+    expect(results[0].checks.duplicate.message).toContain('UBX1031322I7')
+  })
+
+  it('una fila que se omite no la bloquean otros controles (ej. un EAN ya asignado a ese SKU)', () => {
+    const proposal = buildEngineProposal(ENGINES.cascosUBX, { selections: SELECTIONS, sizes: ['.S'] })
+    // El EAN 6937449162997 figura en los datos reales asignado a otro SKU: sería error si la fila se creara.
+    const [row] = validateEngineRows({
+      engine: ENGINES.cascosUBX,
+      proposal,
+      generico: null,
+      rowData: { '.S': { ean: '6937449162997' } },
+      existingEans: new Map([['6937449162997', 'OTRO']]),
+    })
+    expect(row.checks.ean.status).toBe('error')
+    expect(row.omit).toBe(true)
+    expect(row.status).toBe('warn')
+  })
+
+  it('lo ya confirmado en la sesión también se omite, con su propio aviso', () => {
+    const proposal = buildEngineProposal(ENGINES.cascosUBX, { selections: { ...SELECTIONS, color: '50' }, sizes: ['.M'] })
+    const [row] = validateEngineRows({ engine: ENGINES.cascosUBX, proposal, generico: null, session: { skus: ['UBX103132250.M'], eans: [] } })
+    expect(row.checks.duplicate).toEqual({ status: 'warn', message: 'SKU ya confirmado en esta sesión: se omitirá su creación', omit: true })
+  })
+
+  it('repetido dentro del mismo lote sigue siendo error (no es un SKU existente)', () => {
+    const proposal = buildEngineProposal(ENGINES.cascosUBX, { selections: { ...SELECTIONS, color: '50' }, sizes: ['.M', '.M'] })
+    const results = validateEngineRows({ engine: ENGINES.cascosUBX, proposal, generico: null })
+    expect(results[0].checks.duplicate).toEqual({ status: 'error', message: 'Repetido dentro del lote' })
+    expect(results[0].omit).toBe(false)
+  })
+
+  it('LS2: con curva de talles el genérico es el SKU sin talle; sin curva se pide el de la lista', () => {
+    const rowData = { S: { barras: '9806002025011', ean: '6937449162997' } }
+    const withCurve = buildProposal(FAMILIES.cascos, { form: { descripcion: 'FF806', talles: ['S'] }, rowData }, NO_USED)
+    const [row] = validateRows({ family: FAMILIES.cascos, proposal: withCurve, rowData, generico: null, existingSkus: new Set(), existingEans: new Map() })
+    expect(row.checks.generico).toEqual({ status: 'ok', message: 'SKU genérico LS2980600201' })
+
+    const single = buildProposal(FAMILIES.equipaje, { form: { descripcion: 'VALIJA', codigo: '8105057' } })
+    const [singleRow] = validateRows({ family: FAMILIES.equipaje, proposal: single, rowData: {}, generico: null })
+    expect(singleRow.checks.generico).toEqual({ status: 'error', message: 'Sin código genérico' })
+  })
+
+  it('el Excel y el resumen llevan el SKU genérico como código genérico y la clasificación aparte', async () => {
+    const { xlsxRows, XLSX_COLUMNS, summaryTsv } = await import('../services/exportLote')
+    const items = [
+      { sku: 'UBX1031322I7', descTango: 'FF313 AVA ARCANO', ean: '', talle: '', generico: 'UBX1031322I7', clasificacion: 'UBX010313AB-GR', esGenerico: true },
+      { sku: 'UBX1031322I7.XS', descTango: 'FF313 AVA ARCANO XS', ean: '', talle: 'XS', generico: 'UBX1031322I7', clasificacion: 'UBX010313AB-GR' },
+    ]
+    expect(XLSX_COLUMNS).toEqual(['SKU', 'Descripción', 'EAN', 'Código genérico', 'Talle', 'Precio', 'Clasificación'])
+    expect(xlsxRows(items)[1]).toEqual(['UBX1031322I7.XS', 'FF313 AVA ARCANO XS', '', 'UBX1031322I7', 'XS', '', 'UBX010313AB-GR'])
+    expect(summaryTsv(items).split('\n')[2]).toContain('UBX1031322I7\t')
+  })
+})
+
+describe('LS2: SKU ya existente se omite', () => {
+  it('un SKU que ya existe es advertencia (no bloquea) y se marca para omitir', () => {
+    const rowData = {
+      S: { barras: '9806002025011', ean: '6937449162997' },
+      M: { barras: '9806002025010', ean: '6937449163000' },
+    }
+    const proposal = buildProposal(FAMILIES.cascos, { form: { descripcion: 'FF806', talles: ['S', 'M'] }, rowData }, NO_USED)
+    const [small, medium] = validateRows({
+      family: FAMILIES.cascos,
+      proposal,
+      rowData,
+      generico: null,
+      existingSkus: new Set(['LS2980600201.S']),
+      existingEans: new Map(),
+    })
+    expect(small.omit).toBe(true)
+    expect(small.checks.duplicate).toEqual({ status: 'warn', message: 'SKU ya existente: se omitirá su creación', omit: true })
+    expect(small.status).toBe('warn')
+    // El otro talle sí se crea; su genérico ya existe (por LS2980600201.S) y se reutiliza.
+    expect(medium.omit).toBe(false)
+    expect(medium.checks.duplicate.message).toContain('LS2980600201')
+  })
+})

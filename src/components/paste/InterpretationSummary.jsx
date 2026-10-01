@@ -5,6 +5,7 @@ import { field, missing, STATUS } from '../../parsing/normalize'
 import { Button } from '../ui/Button'
 import { DescriptionParts, VariantStatus } from './DescriptionParts'
 import { StatusTag } from './StatusTag'
+import { LinkButton } from '../ui/LinkButton'
 
 const edited = (value) => ({ value, status: value ? STATUS.EDITED : STATUS.MISSING, reason: '' })
 const digits = (value) => value.replace(/\D/g, '')
@@ -17,18 +18,34 @@ const genericLabel = (generico) =>
 export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPrefix = 'solicitud' }) {
   const { fields, rows, candidates, looseNumbers, variants = [] } = draft
 
-  // Elegir una variante la selecciona; volver a tocarla la deselecciona.
-  const toggleVariant = (variant) =>
+  // Se pueden marcar una o varias variantes. Con una, se carga como siempre; con más de una,
+  // se cargan juntas en la carga masiva, con una curva de talles para todas.
+  const selected = draft.selected ?? []
+  const multi = selected.length > 1
+  const setSelected = (next) =>
     onChange({
       ...draft,
+      selected: next,
       fields: {
         ...fields,
         descripcion:
-          fields.descripcion.value === variant
-            ? missing(`El mail pide ${variants.length} variantes: elegí cuál cargar`)
-            : field(variant, STATUS.DETECTED, 'Elegida entre las variantes del mail'),
+          next.length === 1
+            ? field(next[0], STATUS.DETECTED, 'Elegida entre las variantes del mail')
+            : missing(
+                next.length > 1
+                  ? `Se cargan ${next.length} variantes juntas`
+                  : `El mail pide ${variants.length} variantes: marcá cuáles cargar`,
+              ),
       },
     })
+  const toggleVariant = (variant) =>
+    setSelected(variants.filter((item) => (item === variant ? !selected.includes(item) : selected.includes(item))))
+  const allSelected = variants.length > 0 && selected.length === variants.length
+
+  // Curva de talles de la carga masiva: la que se marque acá o, si no, los talles de la tabla.
+  const curve = draft.curve ?? rows.map((row) => row.talle.value).filter(Boolean)
+  const toggleCurve = (size) =>
+    onChange({ ...draft, curve: SIZES.filter((item) => (item === size ? !curve.includes(item) : curve.includes(item))) })
   const setField = (name, value) => onChange({ ...draft, fields: { ...fields, [name]: { ...fields[name], ...edited(value) } } })
   const setRow = (index, name, value) =>
     onChange({
@@ -39,9 +56,7 @@ export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPr
     onChange({
       ...draft,
       rows: rows.map((row, position) =>
-        position === index
-          ? { ...row, [target]: edited(number), unresolved: row.unresolved.filter((item) => item !== number) }
-          : row,
+        position === index ? { ...row, [target]: edited(number), unresolved: row.unresolved.filter((item) => item !== number) } : row,
       ),
     })
   const removeRow = (index) => onChange({ ...draft, rows: rows.filter((_, position) => position !== index) })
@@ -70,19 +85,35 @@ export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPr
       {variants.length > 1 && (
         <div className="variants" role="group" aria-label="Variantes pedidas en el mail">
           <p className="variants__title">
-            El mail pide {variants.length} variantes. Se carga una por vez: elegí cuál y después repetí con la siguiente.
-            El mail no indica talles: agregalos abajo con «+ Agregar talle».
+            El mail pide {variants.length} variantes. Marcá una o varias: con más de una se cargan juntas en la carga masiva, con una curva
+            de talles para todas. El mail no indica talles: se eligen más abajo.
           </p>
+          <div className="variants__toolbar">
+            <label className="checkbox variants__all">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(element) => {
+                  if (element) element.indeterminate = selected.length > 0 && !allSelected
+                }}
+                onChange={() => setSelected(allSelected ? [] : [...variants])}
+              />
+              Seleccionar todas
+            </label>
+            <span className="muted small">
+              {selected.length} de {variants.length} {selected.length === 1 ? 'marcada' : 'marcadas'}
+            </span>
+          </div>
           <ul className="variants__list">
             {variants.map((variant) => {
-              const selected = fields.descripcion.value === variant
+              const checked = selected.includes(variant)
               return (
-                <li key={variant} className={`variants__item ${selected ? 'variants__item--selected' : ''}`}>
-                  <span className="variants__name">{variant}</span>
+                <li key={variant} className={`variants__item ${checked ? 'variants__item--selected' : ''}`}>
+                  <label className="variants__label">
+                    <input type="checkbox" checked={checked} onChange={() => toggleVariant(variant)} />
+                    <span className="variants__name">{variant}</span>
+                  </label>
                   <VariantStatus brandId={fields.marca.value} description={variant} />
-                  <Button size="sm" variant={selected ? 'dark' : 'secondary'} aria-pressed={selected} onClick={() => toggleVariant(variant)}>
-                    {selected ? 'Quitar' : 'Usar'}
-                  </Button>
                 </li>
               )
             })}
@@ -163,80 +194,101 @@ export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPr
 
       <DescriptionParts draft={draft} onChange={onChange} />
 
-      <div className="table-wrap">
-        <table className="table table--compact interpretation__table">
-          <thead>
-            <tr>
-              <th>Talle</th>
-              <th>Código de barras</th>
-              <th>EAN</th>
-              <th>Código proveedor</th>
-              <th>
-                <span className="sr-only">Acciones</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr key={`${index}-${row.talle.value}`}>
-                <td>
-                  <div className="cell-edit">
-                    <select
-                      aria-label={`Talle, fila ${index + 1}`}
-                      className="input input--sm select"
-                      value={row.talle.value}
-                      onChange={(e) => setRow(index, 'talle', e.target.value)}
-                    >
-                      <option value="">—</option>
-                      {SIZES.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                    <StatusTag status={row.talle.status} reason={row.talle.reason} />
-                  </div>
-                </td>
-                {['barras', 'ean', 'codigoProveedor'].map((name) => (
-                  <td key={name}>
-                    <div className="cell-edit">
-                      <input
-                        aria-label={`${name === 'codigoProveedor' ? 'Código proveedor' : name === 'ean' ? 'EAN' : 'Código de barras'}, talle ${row.talle.value || index + 1}`}
-                        className="input input--mono input--sm"
-                        value={row[name].value}
-                        placeholder="Completar"
-                        onChange={(e) =>
-                          setRow(index, name, name === 'codigoProveedor' ? e.target.value.toUpperCase() : digits(e.target.value))
-                        }
-                      />
-                      <StatusTag status={row[name].status} reason={row[name].reason} />
-                    </div>
-                    {name !== 'codigoProveedor' &&
-                      row.unresolved.map((number) => (
-                        <button
-                          key={`${name}-${number}`}
-                          type="button"
-                          className="link-button unresolved"
-                          onClick={() => assignNumber(index, number, name)}
-                        >
-                          Usar {number}
-                        </button>
-                      ))}
-                  </td>
-                ))}
-                <td>
-                  <button type="button" className="link-button" onClick={() => removeRow(index)} aria-label={`Quitar la fila ${index + 1}`}>
-                    Quitar
-                  </button>
-                </td>
-              </tr>
+      {multi && (
+        <div className="field" id={`${idPrefix}-curva`}>
+          <span className="field__label">Curva de talles para todas las variantes</span>
+          <div className="size-picker" role="group" aria-label="Curva de talles">
+            {SIZES.map((size) => (
+              <button
+                key={size}
+                type="button"
+                aria-pressed={curve.includes(size)}
+                className={`size-chip ${curve.includes(size) ? 'is-active' : ''}`}
+                onClick={() => toggleCurve(size)}
+              >
+                {size}
+              </button>
             ))}
-          </tbody>
-        </table>
-      </div>
-      <button type="button" className="link-button" onClick={addRow}>
-        + Agregar talle
-      </button>
+          </div>
+          <p className="field__hint">
+            Después de cargar podés cambiar los talles de una variante en particular. El código de barras y el EAN se completan por SKU.
+          </p>
+        </div>
+      )}
+
+      {!multi && (
+        <>
+          <div className="table-wrap">
+            <table className="table table--compact interpretation__table">
+              <thead>
+                <tr>
+                  <th>Talle</th>
+                  <th>Código de barras</th>
+                  <th>EAN</th>
+                  <th>Código proveedor</th>
+                  <th>
+                    <span className="sr-only">Acciones</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr key={`${index}-${row.talle.value}`}>
+                    <td>
+                      <div className="cell-edit">
+                        <select
+                          aria-label={`Talle, fila ${index + 1}`}
+                          className="input input--sm select"
+                          value={row.talle.value}
+                          onChange={(e) => setRow(index, 'talle', e.target.value)}
+                        >
+                          <option value="">—</option>
+                          {SIZES.map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
+                          ))}
+                        </select>
+                        <StatusTag status={row.talle.status} reason={row.talle.reason} />
+                      </div>
+                    </td>
+                    {['barras', 'ean', 'codigoProveedor'].map((name) => (
+                      <td key={name}>
+                        <div className="cell-edit">
+                          <input
+                            aria-label={`${name === 'codigoProveedor' ? 'Código proveedor' : name === 'ean' ? 'EAN' : 'Código de barras'}, talle ${row.talle.value || index + 1}`}
+                            className="input input--mono input--sm"
+                            value={row[name].value}
+                            placeholder="Completar"
+                            onChange={(e) =>
+                              setRow(index, name, name === 'codigoProveedor' ? e.target.value.toUpperCase() : digits(e.target.value))
+                            }
+                          />
+                          <StatusTag status={row[name].status} reason={row[name].reason} />
+                        </div>
+                        {name !== 'codigoProveedor' &&
+                          row.unresolved.map((number) => (
+                            <LinkButton key={`${name}-${number}`} tone="success" icon="check" className="unresolved" onClick={() => assignNumber(index, number, name)}>
+                              Usar {number}
+                            </LinkButton>
+                          ))}
+                      </td>
+                    ))}
+                    <td>
+                      <LinkButton tone="danger" icon="trash" onClick={() => removeRow(index)} aria-label={`Quitar la fila ${index + 1}`}>
+                        Quitar
+                      </LinkButton>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <LinkButton tone="success" icon="plus" onClick={addRow}>
+            Agregar talle
+          </LinkButton>
+        </>
+      )}
 
       {looseNumbers.length > 0 && (
         <p className="generic-warning" role="note">
@@ -245,7 +297,7 @@ export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPr
       )}
 
       <div className="interpretation__actions">
-        <Button variant="primary" onClick={onLoad}>
+        <Button variant="primary" iconRight="load" onClick={onLoad}>
           Cargar en la pantalla
         </Button>
         {loadError && <span className="small text-error">{loadError}</span>}

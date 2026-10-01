@@ -92,13 +92,13 @@ export function GenericSelect({ id, genericos, value, onChange, hint, emptyMessa
     if (!e.target.value && value) onChange('')
   }
 
-  const defaultHint = hint ?? `Obligatorio. ${genericos.length} genéricos de LS2 para esta familia.`
+  const defaultHint = hint ?? `Opcional con curva de talles (el SKU genérico se arma solo); sin curva es obligatorio. ${genericos.length} códigos de LS2 para esta familia.`
   const fieldHint = open
     ? `${results.length === MAX_RESULTS ? `Primeros ${MAX_RESULTS}` : results.length} resultado(s). Escribí código, modelo, tipología o género.`
     : defaultHint
 
   return (
-    <Field label="Código genérico" htmlFor={id} hint={fieldHint}>
+    <Field label="Clasificación (código de la lista)" htmlFor={id} hint={fieldHint}>
       <div className="combobox">
         <input
           id={id}

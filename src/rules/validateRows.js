@@ -2,7 +2,7 @@ import { EXISTING_EANS, EXISTING_SKUS } from '../data/realData'
 import { isValidGtin } from '../utils/gtin'
 import { BARCODE_PREFIX_LENGTH, EAN_LENGTH, MAX_SKU_LENGTH, MIN_SKU_LENGTH } from './constants'
 import { MAX_TANGO_DESCRIPTION } from './descriptions'
-import { checkGenericExists } from './genericSku'
+import { checkGenericExists, genericSkuOf } from './genericSku'
 
 export const CHECKS = [
   { id: 'length', label: 'Longitud', description: `Máximo ${MAX_SKU_LENGTH}; recomendado desde ${MIN_SKU_LENGTH}`, source: 'Límite de Tango' },
@@ -11,7 +11,7 @@ export const CHECKS = [
   { id: 'ean', label: 'EAN', description: '13 dígitos, verificador GS1 y sin repetir', source: 'GS1 + datos reales · mock' },
   { id: 'barcode', label: 'Código de barras', description: 'Mínimo 7 dígitos; en cascos, mismo prefijo', source: 'Paso a paso del 21/09' },
   { id: 'size', label: 'Talle', description: 'Tabla oficial de talles', source: 'Tabla oficial de talles' },
-  { id: 'generico', label: 'Código genérico', description: 'Obligatorio para todo SKU', source: 'Especificación Funcional' },
+  { id: 'generico', label: 'Código genérico', description: 'El SKU genérico (el mismo SKU sin talle) agrupa la curva; sin curva se elige de la lista', source: 'Especificación Funcional' },
   { id: 'description', label: 'Descripción Tango', description: 'Hasta 30 caracteres (a validar)', source: 'Datos reales' },
   { id: 'price', label: 'Precio', description: 'Opcional por talle', source: 'Carga del alta' },
   { id: 'synonym', label: 'Sinónimo', description: 'Campo de Tango sin regla definida', source: 'Pendiente de definición' },
@@ -21,6 +21,10 @@ const ok = (message) => ({ status: 'ok', message })
 const warn = (message) => ({ status: 'warn', message })
 const error = (message) => ({ status: 'error', message })
 const notApplicable = (message = 'No aplica') => ({ status: 'na', message })
+
+/** Un SKU que ya existe no se crea de nuevo: es una advertencia (no bloquea) y se omite al confirmar. */
+export const OMIT_MESSAGE = 'SKU ya existente: se omitirá su creación'
+const omitted = (message) => ({ status: 'warn', message, omit: true })
 const pending = (message) => ({ status: 'pending', message })
 
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
@@ -63,15 +67,18 @@ export function validateRows({
       ean: checkEan(eanOf(row), { existingEans, sessionEans, eanCounts }),
       barcode: checkBarcode(onlyDigits(data.barras), family, row.prefix),
       size: checkSize(row.size, family),
-      generico: generico ? ok(generico.codigo) : error('Sin código genérico'),
+      // Con curva de talles, el genérico es el propio SKU sin talle; sin curva, se elige de la lista.
+      generico: genericSkuOf(row.sku) ? ok(`SKU genérico ${genericSkuOf(row.sku)}`) : generico ? ok(generico.codigo) : error('Sin código genérico'),
       description: checkDescription(row.tango),
       price: String(data.precio ?? '').trim() ? ok('Informado') : warn('Sin precio'),
       synonym: pending('Pendiente de definición'),
     }
 
+    // Una fila que se omite no se crea: lo demás (EAN, descripción…) ya no la puede bloquear.
+    const omit = checks.duplicate.omit === true
     const statuses = Object.values(checks).map((check) => check.status)
-    const status = statuses.includes('error') ? 'error' : statuses.includes('warn') ? 'warn' : 'ok'
-    return { key: row.key, sku: row.sku, checks, status }
+    const status = omit ? 'warn' : statuses.includes('error') ? 'error' : statuses.includes('warn') ? 'warn' : 'ok'
+    return { key: row.key, sku: row.sku, checks, status, omit }
   })
 }
 
@@ -89,8 +96,8 @@ function checkFormat(row, family) {
 
 export function checkDuplicate(sku, { existingSkus, sessionSkus, skuCounts }) {
   if (!sku) return notApplicable('Sin SKU armado')
-  if (existingSkus.has(sku)) return error('Ya existe en los artículos de LS2')
-  if (sessionSkus.has(sku)) return error('Ya confirmado en esta sesión')
+  if (existingSkus.has(sku)) return omitted(OMIT_MESSAGE)
+  if (sessionSkus.has(sku)) return omitted('SKU ya confirmado en esta sesión: se omitirá su creación')
   if (skuCounts[sku] > 1) return error('Repetido dentro del lote')
   return ok('Sin duplicados')
 }

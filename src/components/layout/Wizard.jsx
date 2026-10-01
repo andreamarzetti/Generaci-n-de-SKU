@@ -1,5 +1,6 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '../ui/Button'
+import { Icon } from '../ui/Icon'
 
 /**
  * Flujo por pasos: indicador numerado (cada número lleva directo a su paso) y
@@ -7,16 +8,27 @@ import { Button } from '../ui/Button'
  * el que no está activo, así no se pierde lo cargado al ir y venir.
  *
  * steps: [{ id, label, done, error, narrow, content }] · controlado con current / onChange.
+ * guard(desde, hacia): si devuelve { message, actionLabel?, onAction? }, no se avanza y se explica
+ * qué falta (con un botón para hacerlo, si corresponde). El aviso desaparece cuando ya no hace falta.
  */
-export function Wizard({ steps, current, onChange }) {
+export function Wizard({ steps, current, onChange, guard }) {
   const top = useRef(null)
   const last = steps.length - 1
+  const [attempted, setAttempted] = useState(false)
 
   const goTo = (index) => {
     if (index < 0 || index > last || index === current) return
+    // Solo se frena al avanzar: volver atrás siempre se puede.
+    if (index > current && guard?.(current, index)) {
+      setAttempted(true)
+      return
+    }
+    setAttempted(false)
     onChange(index)
     top.current?.scrollIntoView?.({ block: 'start' })
   }
+
+  const blocked = attempted ? guard?.(current, current + 1) : null
 
   return (
     <div className="wizard" ref={top}>
@@ -55,15 +67,27 @@ export function Wizard({ steps, current, onChange }) {
         </section>
       ))}
 
+      {blocked && (
+        <div className="wizard__guard" role="alert">
+          <Icon name="alert" size={18} />
+          <p>{blocked.message}</p>
+          {blocked.onAction && (
+            <Button variant="primary" iconRight="load" onClick={blocked.onAction}>
+              {blocked.actionLabel}
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="step-nav">
-        <Button onClick={() => goTo(current - 1)} disabled={current === 0}>
-          ‹ Anterior
+        <Button icon="arrowLeft" onClick={() => goTo(current - 1)} disabled={current === 0}>
+          Anterior
         </Button>
         <span className="muted small">
           Paso {current + 1} de {steps.length} · {steps[current].label}
         </span>
-        <Button variant="primary" onClick={() => goTo(current + 1)} disabled={current === last}>
-          Siguiente ›
+        <Button variant="primary" iconRight="arrowRight" onClick={() => goTo(current + 1)} disabled={current === last}>
+          Siguiente
         </Button>
       </div>
     </div>
