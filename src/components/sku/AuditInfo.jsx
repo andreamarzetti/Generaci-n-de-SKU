@@ -1,7 +1,7 @@
 import { GENERICOS_REPETIDOS } from '../../data/realData'
 import { auditLegacySizes, auditLongSkus, auditStructureAnomalies } from '../../rules/audit'
 import { COLOR_ALIASES } from '../../rules/descriptions'
-import { Card } from '../ui/Card'
+import { InfoPopup } from '../ui/InfoPopup'
 
 const LONG_SKUS = auditLongSkus()
 const ANOMALIES = auditStructureAnomalies()
@@ -10,10 +10,11 @@ const LEGACY_SIZES = auditLegacySizes()
 // Quién hizo el cambio. Fijo por ahora, hasta tener el usuario logueado.
 const CHANGED_BY = 'NOMBRE'
 
-/** Auditoría informativa de los datos reales. No modifica nada. */
-export function AuditCard() {
+/** Ícono (i) con la auditoría informativa de los datos reales. No modifica nada. */
+export function AuditInfo() {
   return (
-    <Card title="Auditoría de códigos existentes" aside={<span className="muted small">Solo informativo</span>}>
+    <InfoPopup label="Auditoría de códigos existentes" wide>
+      <p className="muted small">Solo informativo: no modifica nada.</p>
       <h3 className="rules__subtitle">SKUs de LS2 de más de 15 caracteres ({LONG_SKUS.length})</h3>
       <p className="muted small audit__intro">Corrección sugerida según la tabla oficial de talles:</p>
       <div className="table-wrap">
@@ -106,6 +107,6 @@ export function AuditCard() {
           {[...GENERICOS_REPETIDOS].map(([codigo, models]) => `${codigo} (${models.join(' y ')})`).join(' · ')}.
         </li>
       </ul>
-    </Card>
+    </InfoPopup>
   )
 }

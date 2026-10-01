@@ -6,6 +6,8 @@ import { Button } from '../ui/Button'
 export function ConfirmationBanner({ confirmation, onStartNew }) {
   const [feedback, setFeedback] = useState('')
   const { items } = confirmation
+  const generics = items.filter((item) => item.esGenerico).length
+  const sized = items.length - generics
 
   const flash = (message) => {
     setFeedback(message)
@@ -36,7 +38,8 @@ export function ConfirmationBanner({ confirmation, onStartNew }) {
       <div className="confirmation__head">
         <div>
           <p className="confirmation__title">
-            {items.length} {items.length === 1 ? 'SKU confirmado' : 'SKUs confirmados'} · {confirmation.familyLabel}
+            {sized} {sized === 1 ? 'SKU confirmado' : 'SKUs confirmados'}
+            {generics > 0 && ` + ${generics} ${generics === 1 ? 'genérico' : 'genéricos'}`} · {confirmation.familyLabel}
           </p>
           <p className="confirmation__note">Registrados solo en esta sesión (mock). No se envió nada a Tango.</p>
         </div>
@@ -61,7 +64,9 @@ export function ConfirmationBanner({ confirmation, onStartNew }) {
           <tbody>
             {items.map((item) => (
               <tr key={item.sku}>
-                <td className="mono strong">{item.sku}</td>
+                <td className="mono strong">
+                  {item.sku} {item.esGenerico && <span className="badge badge--neutral">Genérico</span>}
+                </td>
                 <td className="mono">{item.descTango}</td>
                 <td className="mono">{item.ean}</td>
                 <td className="mono">{item.generico}</td>
@@ -74,7 +79,7 @@ export function ConfirmationBanner({ confirmation, onStartNew }) {
 
       <p className="confirmation__note">
         {feedback && <strong>{feedback}. </strong>}
-        El .xlsx trae una hoja "Artículos" (SKU, Descripción, EAN, Código genérico, Talle, Precio). El formato de
+        El SKU genérico es el mismo SKU sin el talle: va primero, con el talle vacío. El .xlsx trae una hoja "Artículos" (SKU, Descripción, EAN, Código genérico, Talle, Precio). El formato de
         importación a Tango se ajusta cuando tengamos la plantilla oficial.
       </p>
     </div>

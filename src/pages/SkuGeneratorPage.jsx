@@ -37,7 +37,6 @@ export function SkuGeneratorPage() {
   const pasteActions = {
     toggle: () => updatePaste({ open: !paste.open }),
     setText: (text) => updatePaste({ text }),
-    pasteExample: (text) => updatePaste({ text, draft: null, message: null, loadError: null, notice: null }),
     clear: () => setPaste({ ...INITIAL_PASTE }),
     interpret: () => {
       const result = interpretRequest(paste.text)

@@ -4,6 +4,7 @@
 import { ALL_GENERICOS, GENERICOS, REGLA_PRODUCTO } from '../data/realData'
 import { BRANDS } from '../engines/engines'
 import { FAMILY_LIST } from '../rules/families'
+import { applyChoices, decomposeDescription, selectionsFromParts, supportsDescription } from './components'
 
 /** Línea del motor según la familia (MAC y GUD tienen cascos y producto). */
 function lineFor(brand, familia) {
@@ -66,6 +67,10 @@ export function toScreenLoad(draft) {
   const sizeCodes = new Set(engine.sizes.map((size) => size.code))
   const sizes = rows.map((row) => `.${row.talle.value}`).filter((code) => sizeCodes.has(code))
   const brandGenericos = ALL_GENERICOS.filter((item) => item.marca === engine.genericBrand)
+  // Cascos: la descripción se descompone en tipología, calota, gráfica y color, y se cargan los que existen.
+  if (line.id === 'cascos' && supportsDescription(brand.id) && text) {
+    Object.assign(selections, selectionsFromParts(applyChoices(decomposeDescription(brand.id, text).parts, draft.choices)))
+  }
 
   return {
     ok: true,

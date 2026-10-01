@@ -9,6 +9,7 @@ export function ActionBar({
   onAcknowledge,
   onValidate,
   onConfirm,
+  pendingAltas = 0,
 }) {
   const validated = validationStatus === 'done'
   const running = validationStatus === 'running'
@@ -19,6 +20,7 @@ export function ActionBar({
   else if (!validated && !running) hint = 'Ejecutá las validaciones antes de confirmar.'
   else if (validated && summary.error > 0)
     hint = `Resolvé ${summary.error} ${summary.error === 1 ? 'bloqueante' : 'bloqueantes'} para confirmar.`
+  else if (pendingAltas > 0) hint = 'Aceptá la creación de los datos nuevos para confirmar.'
   else if (showAck && !warningsAcknowledged) hint = 'Revisá las advertencias para confirmar.'
 
   return (

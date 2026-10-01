@@ -62,7 +62,7 @@ describe('b) cascos MAC / URBAX', () => {
   })
 })
 
-describe('c) producto MAC / NTO / CLIMAX', () => {
+describe('c) producto MAC / NTO', () => {
   const productEngineFor = (sku) => (sku.includes('GUD') ? ENGINES.productoGUD : sku.includes('NTO') ? ENGINES.productoNTO : ENGINES.productoMAC)
   const skus = skusFromSheet('PROD. MAC', 'PROD. NTO', 'PROD. GUD')
 
@@ -86,18 +86,6 @@ describe('c) producto MAC / NTO / CLIMAX', () => {
 
   it('calzado con punto', () => {
     expect(ENGINES.productoNTO.sizes.map((size) => size.code)).toContain('.40')
-  })
-
-  it('CLIMAX genera con advertencia de genéricos', () => {
-    const proposal = buildEngineProposal(ENGINES.productoCLX, {
-      selections: { origen: 'I', familia: '6', tipologia: '10', genero: '1', articulo: '01', color: '02' },
-      sizes: ['.M'],
-      descripcion: 'MUSCULOSA CLIMAX',
-    })
-    expect(proposal.rows[0].sku).toBe('ICLX61010102.M')
-    const [result] = validateEngineRows({ engine: ENGINES.productoCLX, proposal })
-    expect(result.checks.generico).toEqual({ status: 'warn', message: 'La marca no tiene genéricos cargados (a validar)' })
-    expect(result.checks.format.status).toBe('ok')
   })
 })
 
@@ -201,7 +189,7 @@ describe('validaciones comunes', () => {
   })
 
   it('la pantalla ofrece las 7 marcas en orden', () => {
-    expect(BRANDS.map((brand) => brand.label)).toEqual(['LS2', 'MAC', 'URBAX', 'NTO', 'GUD', 'CLIMAX', '921'])
+    expect(BRANDS.map((brand) => brand.label)).toEqual(['LS2', 'MAC', 'URBAX', 'NTO', 'GUD', '921'])
   })
 })
 

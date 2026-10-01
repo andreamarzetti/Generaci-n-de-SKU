@@ -6,6 +6,7 @@ import { auditLongSkus } from './audit'
 import { parseBatch } from './batch'
 import { buildProposal } from './buildProposal'
 import { buildClassification } from './classification'
+import { FREE_DIGIT_RANGE } from './constants'
 import { gs1Description, tangoDescription } from './descriptions'
 import { FAMILIES } from './families'
 import { freeDigitsExhaustedMessage, getFreeDigitOptions } from './freeDigits'
@@ -175,7 +176,7 @@ describe('código de barras', () => {
 
 describe('dígitos libres', () => {
   it('si todos los del rango están ocupados, no se arma el SKU y se explica por qué', () => {
-    const used = ['01', '02', '03', '04', '05', '06', '07', '08', '09'].map((pair) => `LS29999999${pair}.M`)
+    const used = FREE_DIGIT_RANGE.map((pair) => `LS29999999${pair}.M`)
     const sources = [{ label: 'test', skus: used }]
     expect(getFreeDigitOptions('9999999', sources).every((option) => option.usedIn)).toBe(true)
 
@@ -186,6 +187,33 @@ describe('dígitos libres', () => {
 
     const [result] = validateRows({ family: cascos, proposal, rowData, generico: GENERICO })
     expect(result.checks.format).toEqual({ status: 'error', message: freeDigitsExhaustedMessage('9999999') })
+  })
+
+  it('el orden es 01–99, A1…A9, A0, B1…, Z0 y luego 1A…9A, 0A, 1B…', () => {
+    const at = (value) => FREE_DIGIT_RANGE.indexOf(value)
+    expect(FREE_DIGIT_RANGE.slice(0, 3)).toEqual(['01', '02', '03'])
+    expect(FREE_DIGIT_RANGE[98]).toBe('99')
+    expect(FREE_DIGIT_RANGE.slice(99, 112)).toEqual(['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A0', 'B1', 'B2', 'B3'])
+    expect(FREE_DIGIT_RANGE[at('Z0') + 1]).toBe('1A')
+    expect(FREE_DIGIT_RANGE.slice(at('1A'), at('1A') + 11)).toEqual(['1A', '2A', '3A', '4A', '5A', '6A', '7A', '8A', '9A', '0A', '1B'])
+    expect(FREE_DIGIT_RANGE.at(-1)).toBe('0Z')
+    expect(FREE_DIGIT_RANGE).toHaveLength(99 + 260 + 260)
+    expect(new Set(FREE_DIGIT_RANGE).size).toBe(FREE_DIGIT_RANGE.length)
+  })
+
+  it('con 01–99 ocupados, el siguiente libre es A1 y el SKU sigue siendo válido', () => {
+    const used = FREE_DIGIT_RANGE.slice(0, 99).map((pair) => `LS29999999${pair}.M`)
+    const sources = [{ label: 'test', skus: used }]
+    const rowData = { M: { barras: '9999999000001' } }
+    const proposal = buildProposal(cascos, { form: { talles: ['M'] }, rowData }, { freeDigitSources: sources })
+    expect(proposal.rows[0].sku).toBe('LS29999999A1.M')
+    const [result] = validateRows({ family: cascos, proposal, rowData, generico: GENERICO })
+    expect(result.checks.format.status).toBe('ok')
+  })
+
+  it('reconoce como usados los pares alfanuméricos de SKUs existentes', () => {
+    const options = getFreeDigitOptions('9806002', [{ label: 'test', skus: ['LS29806002A1.M'] }])
+    expect(options.find((option) => option.value === 'A1').usedIn).toBe('test')
   })
 
   it('lote: variantes con los mismos 7 dígitos reciben pares distintos y consecutivos', () => {

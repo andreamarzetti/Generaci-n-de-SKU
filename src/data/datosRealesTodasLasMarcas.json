@@ -27,19 +27,9 @@
    "regla": "cascos GUD (propia) + producto GUD"
   },
   {
-   "codigo": "CLX",
-   "nombre": "CLIMAX",
-   "regla": "producto (sin SKUs en el archivo)"
-  },
-  {
    "codigo": "921",
    "nombre": "921",
    "regla": "producto sin letra de origen (a validar)"
-  },
-  {
-   "codigo": "MTR",
-   "nombre": "MTR (solo en REFERENCIA MUESTRAS)",
-   "regla": "a validar"
   }
  ],
  "reglaCascos": {
@@ -2617,10 +2607,6 @@
    {
     "descripcion": "MAC",
     "codigo": "MAC"
-   },
-   {
-    "descripcion": "CLIMAX",
-    "codigo": "CLX"
    },
    {
     "descripcion": "921",

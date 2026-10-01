@@ -10,7 +10,7 @@ const STATE_TEXT = {
 
 const COUNTED = ['warn', 'error']
 
-export function ValidationPanel({ status, results, summary, checks = CHECKS }) {
+export function ValidationPanel({ status, results, summary, checks = CHECKS, info }) {
   const conflicts = (results ?? []).flatMap((row) =>
     checks.filter((check) => COUNTED.includes(row.checks[check.id].status)).map((check) => ({
       id: `${row.key}-${check.id}`,
@@ -23,6 +23,7 @@ export function ValidationPanel({ status, results, summary, checks = CHECKS }) {
   return (
     <Card
       title="Validaciones"
+      info={info}
       aside={
         results && (
           <div className="summary-chips">

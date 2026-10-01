@@ -72,7 +72,7 @@ export function interpretRequest(input, catalogs = DEFAULT_CATALOGS) {
     ? field(descriptionWithoutSize(tableDescription.descripcion, tableDescription.talle), DETECTED, 'Columna DESCRIPCION de la tabla, sin el talle')
     : text.description
       ? field(descriptionWithoutSize(text.description), DEDUCED, 'Línea del mail que menciona el modelo')
-      : missing()
+      : missing(text.variants.length > 1 ? `El mail pide ${text.variants.length} variantes: elegí cuál cargar` : '')
 
   const rows = buildRows(table.rows, text, catalogs, genericByCode)
   // Números de 13 dígitos en líneas sin talle: no se asignan solos.
@@ -90,6 +90,7 @@ export function interpretRequest(input, catalogs = DEFAULT_CATALOGS) {
     fields: { marca, familia, generico, descripcion },
     candidates,
     rows,
+    variants: text.variants,
     looseNumbers,
   }
 }

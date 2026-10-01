@@ -28,4 +28,20 @@ export const PASTE_EXAMPLES = [
       'Natasha',
     ].join('\n'),
   },
+  {
+    id: 'variantes',
+    label: 'Pegar ejemplo 3 · lista de códigos',
+    text: [
+      'Buen dia Andy!',
+      'Podrás armar estos códigos?',
+      'Gracias!',
+      '',
+      'FF313_AVA_ARCANO_GLOSS BLACK_BLUE',
+      'FF313_AVA_ARCANO_GLOSS_BLACK_PINK',
+      'FF313_AVA_ARCANO_GLOSS_BLACK_RED',
+      'FF313_AVA_ARCANO_GLOSS_BLACK_WHITE',
+      'FF313_AVA_ARCANO_GLOSS_BLACK_GRADIENT_PINK_PURPLE',
+      'FF313_AVA_ARCANO_GLOSS_BLACK_GRADIENT_RED_YELLOW',
+    ].join('\n'),
+  },
 ]

@@ -15,15 +15,21 @@ const { CONFIRMED, PENDING } = RULE_STATUS
 
 const SHEET = 'CODIFICACION 2023'
 
-/** Catálogo del JSON → opciones únicas por código. */
+/**
+ * Catálogo del JSON → opciones únicas por código. Las altas nuevas llevan su `alta`
+ * (id de la alta de referencia) para saber si falta aceptarlas.
+ */
 function options(list = []) {
   const seen = new Set()
   return list.flatMap((item) => {
     if (seen.has(item.codigo)) return []
     seen.add(item.codigo)
-    return [{ code: item.codigo, label: item.descripcion }]
+    return [{ code: item.codigo, label: item.descripcion, ...(item.alta ? { alta: item.alta } : {}) }]
   })
 }
+
+/** Calotas y gráficas de las marcas de cascos creadas desde "Altas de referencia" (MAC y URBAX usan las del JSON). */
+export const CUSTOM_CASCOS = {}
 
 const familyName = (code) => REGLA_PRODUCTO.familias.find((family) => family.codigo === code)?.descripcion ?? null
 
@@ -57,14 +63,24 @@ const PRODUCT_SIZES = (() => {
 
 const fixed = (id, label, value) => ({ id, label, length: value.length, fixed: value })
 const select = (id, label, length, getOptions) => ({ id, label, length, getOptions })
-const article = (lines) => ({ id: 'articulo', label: 'Artículo', length: 2, article: true, lines })
+// `lines` se calcula al leerlo: así incluye los artículos dados de alta después de cargar la página.
+const article = (getLines) => ({
+  id: 'articulo',
+  label: 'Artículo',
+  length: 2,
+  article: true,
+  get lines() {
+    return getLines()
+  },
+})
 
-const PRODUCT_ARTICLE_LINES = Object.entries(REGLA_PRODUCTO.articulosPorModelo).map(([line, items]) => ({
-  id: line,
-  label: line,
-  items: options(items),
-}))
-const GUD_ARTICLE_LINES = [{ id: 'GUD', label: 'Artículos GUD', items: options(REGLA_PRODUCTO_GUD.articulos) }]
+const PRODUCT_ARTICLE_LINES = () =>
+  Object.entries(REGLA_PRODUCTO.articulosPorModelo).map(([line, items]) => ({
+    id: line,
+    label: line,
+    items: options(items),
+  }))
+const GUD_ARTICLE_LINES = () => [{ id: 'GUD', label: 'Artículos GUD', items: options(REGLA_PRODUCTO_GUD.articulos) }]
 
 const productSegments = ({ brand, withOrigin = true, tipologias, articleLines, colors }) => [
   ...(withOrigin ? [select('origen', 'Origen', 1, () => options(REGLA_PRODUCTO.origenes))] : []),
@@ -73,7 +89,7 @@ const productSegments = ({ brand, withOrigin = true, tipologias, articleLines, c
   select('tipologia', 'Tipología', 2, tipologias),
   select('genero', 'Género', 1, () => options(REGLA_PRODUCTO.generos)),
   article(articleLines),
-  select('color', 'Color', 2, () => colors),
+  select('color', 'Color', 2, () => options(colors())),
 ]
 
 const productTipologias = (selections) => options(REGLA_PRODUCTO.tipologiasPorFamilia[familyName(selections.familia)] ?? [])
@@ -105,10 +121,18 @@ const PRODUCT_RULES = [
 
 // ── Motores ───────────────────────────────────────────────
 
-function cascosEngine(brand) {
+/** Listas de calotas y gráficas de una marca de cascos (leídas al usarlas, para ver las altas nuevas). */
+function cascosLists(brand) {
+  if (brand === 'MAC') return { calotas: () => REGLA_CASCOS.calotasMAC, graficas: () => REGLA_CASCOS.graficasMAC }
+  if (brand === 'UBX') return { calotas: () => REGLA_CASCOS.calotasURBAX, graficas: () => REGLA_CASCOS.graficasURBAX }
+  CUSTOM_CASCOS[brand] ??= { calotas: [], graficas: [] }
+  return { calotas: () => CUSTOM_CASCOS[brand].calotas, graficas: () => CUSTOM_CASCOS[brand].graficas }
+}
+
+export function cascosEngine(brand) {
   const isMac = brand === 'MAC'
-  const calotas = options(isMac ? REGLA_CASCOS.calotasMAC : REGLA_CASCOS.calotasURBAX)
-  const graficas = options(isMac ? REGLA_CASCOS.graficasMAC : REGLA_CASCOS.graficasURBAX)
+  const isCustom = brand !== 'MAC' && brand !== 'UBX'
+  const lists = cascosLists(brand)
   const tipologias = REGLA_CASCOS.tipologias
   return {
     id: `cascos-${brand}`,
@@ -117,8 +141,8 @@ function cascosEngine(brand) {
     segments: [
       fixed('marca', 'Marca', brand),
       select('tipologia', 'Tipología', 2, () => options(tipologias)),
-      select('calota', 'Calota', 3, () => calotas),
-      select('grafica', 'Gráfica', 2, () => graficas),
+      select('calota', 'Calota', 3, () => options(lists.calotas())),
+      select('grafica', 'Gráfica', 2, () => options(lists.graficas())),
       select('color', 'Color', 2, () => options(REGLA_CASCOS.colores)),
     ],
     sizes: CASCO_SIZES,
@@ -138,7 +162,7 @@ function cascosEngine(brand) {
         source: `${SHEET}, hoja CASCOS MAC-URX: verificada contra los 2.515 SKUs reales (100%)`,
       },
       {
-        text: `Calotas y gráficas según la marca (${isMac ? 'calotasMAC / graficasMAC' : 'calotasURBAX / graficasURBAX'}).`,
+        text: `Calotas y gráficas según la marca (${isCustom ? 'altas de referencia de la marca' : isMac ? 'calotasMAC / graficasMAC' : 'calotasURBAX / graficasURBAX'}).`,
         status: CONFIRMED,
         source: `${SHEET}, hoja REFERENCIA CASCOS`,
       },
@@ -152,8 +176,7 @@ function cascosEngine(brand) {
   }
 }
 
-function productEngine(brand) {
-  const isClimax = brand === 'CLX'
+export function productEngine(brand) {
   return {
     id: `producto-${brand}`,
     label: 'Producto',
@@ -162,7 +185,7 @@ function productEngine(brand) {
       brand,
       tipologias: productTipologias,
       articleLines: PRODUCT_ARTICLE_LINES,
-      colors: options(REGLA_PRODUCTO.colores),
+      colors: () => REGLA_PRODUCTO.colores,
     }),
     sizes: PRODUCT_SIZES,
     allowNoSize: true,
@@ -174,9 +197,6 @@ function productEngine(brand) {
         status: CONFIRMED,
         source: `${SHEET}, hojas PROD. MAC y PROD. NTO: verificada contra 975 de 981 SKUs reales`,
       },
-      ...(isClimax
-        ? [{ text: 'CLIMAX: marca sin SKUs históricos; se permite generar.', status: PENDING, source: SHEET }]
-        : []),
       ...PRODUCT_RULES,
     ],
   }
@@ -190,7 +210,7 @@ const productGudEngine = {
     brand: 'GUD',
     tipologias: () => options(REGLA_PRODUCTO_GUD.tipologias),
     articleLines: GUD_ARTICLE_LINES,
-    colors: options(REGLA_PRODUCTO_GUD.colores),
+    colors: () => REGLA_PRODUCTO_GUD.colores,
   }),
   sizes: PRODUCT_SIZES,
   allowNoSize: true,
@@ -251,7 +271,7 @@ const product921Engine = {
     withOrigin: false,
     tipologias: productTipologias,
     articleLines: PRODUCT_ARTICLE_LINES,
-    colors: options(REGLA_PRODUCTO.colores),
+    colors: () => REGLA_PRODUCTO.colores,
   }),
   sizes: PRODUCT_SIZES,
   allowNoSize: true,
@@ -274,7 +294,6 @@ export const ENGINES = {
   cascosUBX: cascosEngine('UBX'),
   productoMAC: productEngine('MAC'),
   productoNTO: productEngine('NTO'),
-  productoCLX: productEngine('CLX'),
   productoGUD: productGudEngine,
   cascosGUD: cascosGudEngine,
   producto921: product921Engine,
@@ -300,7 +319,6 @@ export const BRANDS = [
       { id: 'producto', label: 'Producto', engine: ENGINES.productoGUD },
     ],
   },
-  { id: 'CLX', label: 'CLIMAX', lines: [{ id: 'producto', label: 'Producto', engine: ENGINES.productoCLX }] },
   { id: '921', label: '921', lines: [{ id: 'producto', label: 'Producto', engine: ENGINES.producto921 }] },
 ]
 
@@ -362,9 +380,19 @@ export const ENGINE_GENERAL_RULES = [
     source: SOURCES.FUNCTIONAL_SPEC,
   },
   {
-    text: 'CLIMAX y 921 no tienen genéricos cargados: se advierte en lugar de bloquear.',
+    text: '921 no tiene genéricos cargados: se advierte en lugar de bloquear.',
     status: RULE_STATUS.PENDING,
     source: 'CODIFICACION GENERICOS',
+  },
+  {
+    text: 'SKU genérico: el mismo SKU sin el talle (.S, .M, .XL…). Se da de alta uno por variante, además de un SKU por talle.',
+    status: RULE_STATUS.CONFIRMED,
+    source: SOURCES.AREA_RULE,
+  },
+  {
+    text: 'Datos nuevos (marca, modelo, gráfica, color, genérico) se dan de alta en «Altas de referencia»: los SKU que los usan se bloquean hasta aceptar su creación.',
+    status: RULE_STATUS.CONFIRMED,
+    source: SOURCES.AREA_RULE,
   },
   { text: 'EAN opcional; si se carga, 13 dígitos con dígito verificador válido.', status: RULE_STATUS.CONFIRMED, source: SOURCES.GS1 },
   { text: 'Descripción manual en esta etapa; la generación automática queda para después.', status: RULE_STATUS.PENDING, source: 'Etapa D' },

@@ -2,6 +2,7 @@ import { EXISTING_EANS, EXISTING_SKUS } from '../data/realData'
 import { isValidGtin } from '../utils/gtin'
 import { BARCODE_PREFIX_LENGTH, EAN_LENGTH, MAX_SKU_LENGTH, MIN_SKU_LENGTH } from './constants'
 import { MAX_TANGO_DESCRIPTION } from './descriptions'
+import { checkGenericExists } from './genericSku'
 
 export const CHECKS = [
   { id: 'length', label: 'Longitud', description: `Máximo ${MAX_SKU_LENGTH}; recomendado desde ${MIN_SKU_LENGTH}`, source: 'Límite de Tango' },
@@ -23,6 +24,9 @@ const notApplicable = (message = 'No aplica') => ({ status: 'na', message })
 const pending = (message) => ({ status: 'pending', message })
 
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
+
+/** Si el SKU está libre pero su genérico ya existe, se avisa (el genérico se reutiliza). */
+const withGenericWarning = (check, sku, sources) => (check.status === 'ok' ? (checkGenericExists(sku, sources) ?? check) : check)
 
 function countBy(values) {
   return values.reduce((acc, value) => {
@@ -55,7 +59,7 @@ export function validateRows({
     const checks = {
       length: checkLength(row.sku),
       format: checkFormat(row, family),
-      duplicate: checkDuplicate(row.sku, { existingSkus, sessionSkus, skuCounts }),
+      duplicate: withGenericWarning(checkDuplicate(row.sku, { existingSkus, sessionSkus, skuCounts }), row.sku, { existingSkus, sessionSkus }),
       ean: checkEan(eanOf(row), { existingEans, sessionEans, eanCounts }),
       barcode: checkBarcode(onlyDigits(data.barras), family, row.prefix),
       size: checkSize(row.size, family),

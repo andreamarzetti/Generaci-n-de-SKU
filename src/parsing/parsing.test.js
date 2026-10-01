@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { ENGINES } from '../engines/engines'
+import { buildEngineProposal } from '../engines/proposal'
+import { acceptAltas, createAlta, resetAltas } from '../reference/store'
+import { applyChoices, COMPONENT_STATUS, decomposeDescription, selectionsFromParts } from './components'
 import { buildProposal } from '../rules/buildProposal'
 import { FAMILIES } from '../rules/families'
 import { PASTE_EXAMPLES } from './examples'
@@ -80,6 +84,112 @@ describe('ejemplo 2: texto de mail', () => {
     const chosen = { ...result, fields: { ...result.fields, generico: { value: 'LS2010806AB-GR', status: STATUS.EDITED } } }
     expect(skusAfterLoading(chosen)).toEqual(ANDRES_SKUS)
     expect(toScreenLoad(chosen).payload.form.generico).toBe('LS2010806AB-GR|FUSION')
+  })
+})
+
+describe('ejemplo 3: lista de códigos con guiones bajos', () => {
+  const result = interpretRequest(example('variantes'))
+
+  it('reconoce el modelo pese a los guiones bajos y deduce marca y familia', () => {
+    expect(result.fields.marca).toMatchObject({ value: 'UBX', status: STATUS.DEDUCED })
+    expect(result.fields.marca.reason).toContain('FF313')
+    expect(result.fields.familia).toMatchObject({ value: 'CASCOS', status: STATUS.DEDUCED })
+  })
+
+  it('separa las 6 variantes, con los guiones bajos como espacios', () => {
+    expect(result.variants).toEqual([
+      'FF313 AVA ARCANO GLOSS BLACK BLUE',
+      'FF313 AVA ARCANO GLOSS BLACK PINK',
+      'FF313 AVA ARCANO GLOSS BLACK RED',
+      'FF313 AVA ARCANO GLOSS BLACK WHITE',
+      'FF313 AVA ARCANO GLOSS BLACK GRADIENT PINK PURPLE',
+      'FF313 AVA ARCANO GLOSS BLACK GRADIENT RED YELLOW',
+    ])
+  })
+
+  it('no elige la descripción ni el genérico, y no inventa talles', () => {
+    expect(result.fields.descripcion).toMatchObject({ value: '', status: STATUS.MISSING })
+    expect(result.fields.descripcion.reason).toContain('6 variantes')
+    expect(result.candidates.map((item) => item.codigo).sort()).toEqual(['UBX010313AB-GR', 'UBX010313AB-SD'])
+    expect(result.fields.generico.value).toBe('')
+    expect(result.rows).toEqual([])
+    expect(result.empty).toBe(false)
+  })
+
+  it('con una sola variante la descripción queda deducida', () => {
+    const single = interpretRequest('Podés armar FF313_AVA_ARCANO_GLOSS_BLACK_RED?')
+    expect(single.variants).toEqual([])
+    const listed = interpretRequest('FF313_AVA_ARCANO_GLOSS_BLACK_RED')
+    expect(listed.variants).toEqual(['FF313 AVA ARCANO GLOSS BLACK RED'])
+    expect(listed.fields.descripcion).toMatchObject({ value: 'FF313 AVA ARCANO GLOSS BLACK RED', status: STATUS.DEDUCED })
+  })
+
+  it('no confunde los ejemplos anteriores con una lista de variantes', () => {
+    expect(interpretRequest(example('mail')).variants).toEqual([])
+    expect(interpretRequest(example('excel')).variants).toEqual([])
+  })
+})
+
+describe('descripción contra la composición del SKU (URBAX)', () => {
+  afterEach(() => resetAltas())
+  const partsOf = (description) => Object.fromEntries(decomposeDescription('UBX', description).parts.map((part) => [part.id, part]))
+
+  it('los 6 colores del mail existen en la tabla, respetando el orden de las palabras', () => {
+    const codes = interpretRequest(example('variantes')).variants.map((variant) => {
+      const parts = partsOf(variant)
+      expect(parts.calota).toMatchObject({ status: COMPONENT_STATUS.FOUND, code: '313', name: 'AVA' })
+      expect(parts.grafica).toMatchObject({ status: COMPONENT_STATUS.FOUND, code: '22', name: 'ARCANO' })
+      return parts.color.code
+    })
+    // GLOSS BLACK RED es el color 50 (no BLACK RED GLOSS ni RED BLACK GLOSS); GLOSS BLACK WHITE = BLACK WHITE GLOSS.
+    expect(codes).toEqual(['I7', 'E8', '50', '84', 'I9', 'I0'])
+  })
+
+  it('deduce la tipología por los SKU que ya existen con esa calota, sin mezclar repuestos', () => {
+    expect(partsOf('FF313 AVA ARCANO GLOSS BLACK BLUE').tipologia).toMatchObject({ status: COMPONENT_STATUS.DEDUCED, code: '10' })
+  })
+
+  it('lo que no existe queda como nuevo, con el alta ya preparada, y nada se inventa', () => {
+    const parts = partsOf('FF999 NOVA ZETA GLOSS BLACK LIME')
+    expect(parts.calota).toMatchObject({ status: COMPONENT_STATUS.NEW, code: '', create: { targetId: 'calota-UBX', values: { codigo: '999', descripcion: 'NOVA' } } })
+    expect(parts.grafica).toMatchObject({ status: COMPONENT_STATUS.NEW, create: { targetId: 'grafica-UBX', values: { descripcion: 'ZETA' } } })
+    expect(parts.color).toMatchObject({ status: COMPONENT_STATUS.NEW, create: { targetId: 'color-cascos', values: { descripcion: 'BLACK LIME GLOSS' } } })
+    expect(parts.tipologia.status).toBe(COMPONENT_STATUS.AMBIGUOUS)
+    expect(selectionsFromParts(Object.values(parts))).toEqual({})
+  })
+
+  it('al crear las altas, la descripción se resuelve y queda pendiente de aceptar', () => {
+    createAlta('calota-UBX', { codigo: '999', descripcion: 'NOVA' })
+    createAlta('grafica-UBX', { codigo: 'ZZ', descripcion: 'ZETA' })
+    const { entry } = createAlta('color-cascos', { codigo: 'ZY', descripcion: 'BLACK LIME GLOSS', abreviatura: 'BK/LM GS' })
+    const parts = partsOf('FF999 NOVA ZETA GLOSS BLACK LIME')
+    expect(parts.calota).toMatchObject({ status: COMPONENT_STATUS.FOUND, code: '999' })
+    expect(parts.grafica).toMatchObject({ status: COMPONENT_STATUS.FOUND, code: 'ZZ' })
+    expect(parts.color).toMatchObject({ status: COMPONENT_STATUS.FOUND, code: 'ZY', alta: entry.id })
+    acceptAltas([entry.id])
+  })
+
+  it('con varias tipologías posibles, la elección del usuario se aplica', () => {
+    const { parts } = decomposeDescription('UBX', 'FF999 NOVA ZETA GLOSS BLACK LIME')
+    const tipologia = applyChoices(parts, { tipologia: '11' }).find((part) => part.id === 'tipologia')
+    expect(tipologia).toMatchObject({ status: COMPONENT_STATUS.FOUND, code: '11' })
+  })
+
+  it('marcas sin calota (GUD) o desconocidas no se descomponen', () => {
+    expect(decomposeDescription('GUD', 'FF313 AVA ARCANO GLOSS BLACK BLUE').supported).toBe(false)
+    expect(decomposeDescription('LS2', 'FF313 AVA ARCANO GLOSS BLACK BLUE').supported).toBe(false)
+  })
+
+  it('carga en el motor de URBAX los códigos de la variante elegida y arma el SKU', () => {
+    const draft = interpretRequest(example('variantes'))
+    draft.fields.descripcion = { value: draft.variants[2], status: STATUS.DETECTED, reason: '' }
+    draft.fields.generico = { value: 'UBX010313AB-GR', status: STATUS.EDITED, reason: '' }
+    draft.rows = [{ talle: { value: 'M' }, barras: { value: '' }, ean: { value: '' }, codigoProveedor: { value: '' }, unresolved: [] }]
+    const load = toScreenLoad(draft)
+    expect(load).toMatchObject({ ok: true, brandId: 'UBX', target: 'engine' })
+    expect(load.payload.selections).toEqual({ tipologia: '10', calota: '313', grafica: '22', color: '50' })
+    const proposal = buildEngineProposal(ENGINES.cascosUBX, { selections: load.payload.selections, sizes: load.payload.sizes })
+    expect(proposal.rows[0].sku).toBe('UBX1031322' + '50.M')
   })
 })
 

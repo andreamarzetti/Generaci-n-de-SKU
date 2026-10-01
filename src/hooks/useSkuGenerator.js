@@ -5,6 +5,8 @@ import { parseBatch } from '../rules/batch'
 import { buildProposal, proposalSegments } from '../rules/buildProposal'
 import { buildClassification } from '../rules/classification'
 import { emptyForm, FAMILIES, FAMILY_LIST } from '../rules/families'
+import { pendingAltasUsed } from '../reference/store'
+import { useAltas } from '../reference/useAltas'
 import { validateProposal } from '../services/mockSkuService'
 import { useExternalLoad } from './useExternalLoad'
 
@@ -24,6 +26,7 @@ function summarize(results) {
  * propuesta armada, validación (mock con datos reales) y confirmación.
  */
 export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
+  const altas = useAltas()
   const [familyId, setFamilyId] = useState('cascos')
   const [forms, setForms] = useState(initialForms)
   const [modeByFamily, setModeByFamily] = useState({})
@@ -44,8 +47,11 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   const batchRows = mode === 'lote' ? (batchByFamily[familyId] ?? null) : null
   const batchPreview = useMemo(() => parseBatch(batchText, family), [batchText, family])
   const rowData = useMemo(() => rowDataByFamily[familyId] ?? {}, [rowDataByFamily, familyId])
-  const genericos = useMemo(() => genericosForFamily(family.familia), [family])
+  // `altas` cambia cuando se crea o acepta un alta: hay que volver a leer los genéricos.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const genericos = useMemo(() => genericosForFamily(family.familia), [family, altas])
   const generico = findGenerico(form.generico)
+  const pendingAltas = useMemo(() => pendingAltasUsed(null, {}, generico), [generico, altas])
 
   // Lo confirmado en la sesión cuenta como usado, salvo el lote recién confirmado
   // mientras se muestra, para que la propuesta no cambie debajo.
@@ -86,7 +92,7 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
 
   const canValidate = proposal.rows.length > 0
   const canConfirm =
-    Boolean(results) && summary.error === 0 && (summary.warn === 0 || warningsAcknowledged) && !isConfirmed
+    Boolean(results) && summary.error === 0 && (summary.warn === 0 || warningsAcknowledged) && !isConfirmed && pendingAltas.length === 0
 
   // Etapas: cada una se completa recién cuando se cumple su condición.
   const dataComplete =
@@ -218,6 +224,17 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
 
   const confirm = () => {
     if (!canConfirm) return
+    const genericItems = proposal.generics.map((item) => ({
+      sku: item.sku,
+      ean: '',
+      descTango: item.descripcion,
+      gs1: '',
+      talle: '',
+      precio: '',
+      generico: generico?.codigo,
+      familyId,
+      esGenerico: true,
+    }))
     const items = proposal.rows.map((row) => ({
       sku: row.sku,
       ean: onlyDigits(rowData[row.key]?.ean),
@@ -228,8 +245,9 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
       generico: generico?.codigo,
       familyId,
     }))
-    setConfirmedItems((prev) => [...prev, ...items])
-    setLastConfirmation({ signature, items, familyLabel: family.label, at: new Date() })
+    const all = [...genericItems, ...items]
+    setConfirmedItems((prev) => [...prev, ...all])
+    setLastConfirmation({ signature, items: all, familyLabel: family.label, at: new Date() })
   }
 
   const startNew = () => {
@@ -261,6 +279,8 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
     warningsAcknowledged,
     canValidate,
     canConfirm,
+    pendingAltas,
+    pendingSkus: proposal.rows.map((row) => row.sku).filter(Boolean),
     isConfirmed,
     lastConfirmation,
     actions: {

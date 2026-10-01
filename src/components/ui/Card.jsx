@@ -1,10 +1,16 @@
-export function Card({ title, aside, children, className = '' }) {
+/** `info`: ícono (i) de referencia de la sección; queda siempre en la esquina del encabezado. */
+export function Card({ title, aside, info, children, className = '' }) {
   return (
     <section className={`card ${className}`}>
-      {(title || aside) && (
+      {(title || aside || info) && (
         <header className="card__header">
           {title && <h2 className="card__title">{title}</h2>}
-          {aside && <div className="card__aside">{aside}</div>}
+          {(aside || info) && (
+            <div className="card__aside">
+              {aside}
+              {info}
+            </div>
+          )}
         </header>
       )}
       {children}

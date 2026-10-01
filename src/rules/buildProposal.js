@@ -1,6 +1,7 @@
 import { BARCODE_PREFIX_LENGTH, BRAND_PREFIX } from './constants'
 import { descriptionWithoutSize, gs1Description, MAX_TANGO_DESCRIPTION, tangoDescription } from './descriptions'
 import { assignFreeDigits, freeDigitsExhaustedMessage } from './freeDigits'
+import { genericSkus } from './genericSku'
 import { normalizeSize, sortBySize, splitFootwearCode, splitSupplierCodes } from './sizes'
 
 const onlyDigits = (value = '') => String(value).replace(/\D/g, '')
@@ -31,12 +32,15 @@ const barcodePrefix = (barcode) => {
  *  - rows:     un SKU por fila (sku = null y buildError si no se pudo armar),
  *              con descripción Tango y GS1
  *  - groups:   (cascos) grupos de 7 dígitos + variante con su par de dígitos libres
+ *  - generics: SKU genérico de cada variante (el SKU sin talle) con su descripción
  *  - issues:   datos que faltan para completar la propuesta
  */
 export function buildProposal(family, { form = {}, batchRows = null, rowData = {} } = {}, options = {}) {
   const base = batchRows ? buildFromBatch(family, batchRows, rowData) : buildFromForm(family, form, rowData)
   const withSkus = family.scheme === 'cascos' ? composeCascos(base, rowData, options) : base
-  return { ...withSkus, rows: withSkus.rows.map((row) => withDescriptions(row, rowData)) }
+  const rows = withSkus.rows.map((row) => withDescriptions(row, rowData))
+  const generics = genericSkus(rows, (row) => descriptionWithoutSize(row.tango.text, row.size?.recognized ? row.size.value : null))
+  return { ...withSkus, rows, generics }
 }
 
 // ── Carga manual ──────────────────────────────────────────

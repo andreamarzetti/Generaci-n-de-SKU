@@ -24,15 +24,25 @@ const stripAccents = (text) => text.normalize('NFD').replace(/[̀-ͯ]/g, '')
 const words = (text) => text.split(/\s+/).filter(Boolean)
 
 // Colores en inglés de la tabla + equivalencias, del nombre más largo al más corto.
-const COLOR_PHRASES = [
-  ...COLORS.filter((color) => color.ingles).map((color) => ({ words: words(color.ingles), abbr: color.abreviatura })),
-  ...COLOR_ALIASES.map((alias) => ({ words: words(alias.name), abbr: alias.abbr, alias: true })),
-].sort((a, b) => b.words.length - a.words.length || b.words.join(' ').length - a.words.join(' ').length)
+// Se recalcula si la tabla cambió (altas de colores de LS2 dadas de alta después de cargar la página).
+let colorPhrasesCache = { size: -1, phrases: [] }
+function colorPhrases() {
+  if (colorPhrasesCache.size !== COLORS.length) {
+    colorPhrasesCache = {
+      size: COLORS.length,
+      phrases: [
+        ...COLORS.filter((color) => color.ingles).map((color) => ({ words: words(color.ingles), abbr: color.abreviatura })),
+        ...COLOR_ALIASES.map((alias) => ({ words: words(alias.name), abbr: alias.abbr, alias: true })),
+      ].sort((a, b) => b.words.length - a.words.length || b.words.join(' ').length - a.words.join(' ').length),
+    }
+  }
+  return colorPhrasesCache.phrases
+}
 
 const FINISH_BY_NAME = Object.fromEntries(FINISHES.map((finish) => [finish.name, finish.abbr]))
 
 function matchColor(tokens, index) {
-  return COLOR_PHRASES.find((phrase) => phrase.words.every((word, offset) => tokens[index + offset] === word))
+  return colorPhrases().find((phrase) => phrase.words.every((word, offset) => tokens[index + offset] === word))
 }
 
 /** Quita el talle final de una descripción ("FF808 ROAD BK MT XXL" → "FF808 ROAD BK MT"). */

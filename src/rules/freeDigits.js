@@ -1,7 +1,7 @@
 import { EXISTING_SKUS } from '../data/realData'
 import { FREE_DIGIT_RANGE } from './constants'
 
-const CASCO_SKU = /^LS2(\d{7})(\d{2})\./
+const CASCO_SKU = /^LS2(\d{7})([0-9A-Z]{2})\./
 
 /**
  * Estado de los 2 dígitos libres para un prefijo de 7 dígitos.

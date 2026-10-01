@@ -92,9 +92,26 @@ export function descriptionFromLine(line, model) {
   return (end === -1 ? tail : tail.slice(0, end)).trim()
 }
 
+const VARIANT_LINE = /^[A-Z]{1,3}\d{2,4}[A-Z]?_/
+
+/**
+ * Variantes pedidas como códigos con guiones bajos, una por línea
+ * ("FF313_AVA_ARCANO_GLOSS_BLACK_PINK" → "FF313 AVA ARCANO GLOSS BLACK PINK").
+ * Recibe las líneas ya normalizadas, con los guiones bajos todavía puestos.
+ */
+export function findVariants(lines) {
+  const variants = lines
+    .filter((line) => VARIANT_LINE.test(line))
+    .map((line) => line.replace(/_+/g, ' ').replace(/[\s,;.]+$/, '').replace(/\s+/g, ' ').trim())
+  return [...new Set(variants)]
+}
+
 /** Interpreta el cuerpo de un mail (sin la tabla). Todo en mayúsculas y sin acentos. */
 export function readText(lines, catalogs) {
-  const normalizedLines = lines.map(normalizeText).filter(Boolean)
+  const rawLines = lines.map(normalizeText).filter(Boolean)
+  const variants = findVariants(rawLines)
+  // El guion bajo pega las palabras entre sí: se trata como espacio para reconocer modelo, marca y familia.
+  const normalizedLines = rawLines.map((line) => line.replace(/_+/g, ' '))
   const text = normalizedLines.join('\n')
 
   const brands = findNames(text, catalogs.brands, 'id')
@@ -118,6 +135,8 @@ export function readText(lines, catalogs) {
     models,
     range,
     rows,
-    description: modelLine ? descriptionFromLine(modelLine, models[0]) : '',
+    variants,
+    // Con varias variantes no hay una única descripción: se elige una en la revisión.
+    description: modelLine && variants.length <= 1 ? descriptionFromLine(modelLine, models[0]) : '',
   }
 }

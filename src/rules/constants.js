@@ -4,8 +4,17 @@ export const BRAND_PREFIX = 'LS2'
 export const EAN_LENGTH = 13
 export const BARCODE_PREFIX_LENGTH = 7
 
-// Rango de dígitos libres para cascos (A validar: observado en los datos).
-export const FREE_DIGIT_RANGE = ['01', '02', '03', '04', '05', '06', '07', '08', '09']
+/**
+ * Dígitos libres de los cascos de LS2, en el orden en que se asignan:
+ * 01–99, luego A1…A9, A0, B1…B0 … Z1…Z0 y por último 1A…9A, 0A, 1B…0B … 1Z…0Z.
+ */
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+const DIGITS_FROM_ONE = '1234567890'.split('')
+export const FREE_DIGIT_RANGE = [
+  ...Array.from({ length: 99 }, (_, index) => String(index + 1).padStart(2, '0')),
+  ...LETTERS.flatMap((letter) => DIGITS_FROM_ONE.map((digit) => letter + digit)),
+  ...LETTERS.flatMap((letter) => DIGITS_FROM_ONE.map((digit) => digit + letter)),
+]
 
 export const RULE_STATUS = {
   CONFIRMED: 'confirmada',

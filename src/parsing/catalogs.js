@@ -10,7 +10,6 @@ export const BRAND_NAMES = [
   { id: 'UBX', names: ['URBAX', 'UBX'] },
   { id: 'NTO', names: ['NTO', 'NINE TO ONE'] },
   { id: 'GUD', names: ['GUD'] },
-  { id: 'CLX', names: ['CLIMAX', 'CLX'] },
   { id: '921', names: ['921'] },
 ]
 

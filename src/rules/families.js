@@ -98,7 +98,7 @@ export const FAMILIES = {
         hint: 'Un SKU por talle. El código de barras, el EAN y el precio de cada talle se cargan en la tabla.',
       },
     ],
-    formatPattern: new RegExp(`^LS2\\d{9}\\.(${LETTER_SIZES})$`),
+    formatPattern: new RegExp(`^LS2\\d{7}[0-9A-Z]{2}\\.(${LETTER_SIZES})$`),
     formatHint: 'LS2 + 7 dígitos del código de barras + 2 dígitos libres + .TALLE',
     rules: [
       {
@@ -111,7 +111,11 @@ export const FAMILIES = {
         status: CONFIRMED,
         source: SOURCES.STEP_BY_STEP_21_09,
       },
-      { text: 'Rango de dígitos libres 01–09.', status: PENDING, source: SOURCES.REAL_DATA },
+      {
+        text: 'Orden de los 2 dígitos libres: 01–99; si se agotan, A1…A9, A0, B1…B0 hasta Z0 y luego 1A…9A, 0A hasta 0Z.',
+        status: CONFIRMED,
+        source: SOURCES.AREA_RULE,
+      },
     ],
   },
   indumentaria: sizeSuffixFamily('indumentaria', 'Indumentaria', 'INDUMENTARIA'),
@@ -194,6 +198,16 @@ export const GENERAL_RULES = [
     source: SOURCES.SIZE_TABLE,
   },
   { text: 'Todo SKU debe tener código genérico asociado.', status: CONFIRMED, source: SOURCES.FUNCTIONAL_SPEC },
+  {
+    text: 'SKU genérico: el mismo SKU sin el talle (.S, .M, .XL…). Se da de alta uno por variante, además de un SKU por talle.',
+    status: CONFIRMED,
+    source: SOURCES.AREA_RULE,
+  },
+  {
+    text: 'Un genérico nuevo (alta de referencia) queda pendiente: el SKU que lo usa se bloquea hasta aceptar su creación.',
+    status: CONFIRMED,
+    source: SOURCES.AREA_RULE,
+  },
   { text: 'EAN de 13 dígitos con dígito verificador válido.', status: CONFIRMED, source: SOURCES.GS1 },
   {
     text: 'Descripción Tango: colores en inglés → abreviatura (seguidos, unidos con "/"), GLOSS → GS, MATT/MATTE → MT y el talle al final.',

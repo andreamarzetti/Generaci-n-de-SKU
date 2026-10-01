@@ -1,5 +1,5 @@
-import { PASTE_EXAMPLES } from '../../parsing/examples'
 import { Button } from '../ui/Button'
+import { FormatsInfo } from './FormatsInfo'
 import { InterpretationSummary } from './InterpretationSummary'
 
 /**
@@ -26,7 +26,8 @@ export function PasteRequestCard({ state, actions }) {
             Pegar solicitud
           </button>
         </h2>
-        <span className="muted small">Mail o filas del Excel · se interpreta sin enviar nada</span>
+        <span className="muted small paste__hint">Mail o filas del Excel · se interpreta sin enviar nada</span>
+        <FormatsInfo />
       </header>
 
       {open && (
@@ -46,11 +47,6 @@ export function PasteRequestCard({ state, actions }) {
             <Button variant="dark" onClick={actions.interpret} disabled={!text.trim()}>
               Interpretar
             </Button>
-            {PASTE_EXAMPLES.map((example) => (
-              <Button key={example.id} size="sm" onClick={() => actions.pasteExample(example.text)}>
-                {example.label}
-              </Button>
-            ))}
             {(text || draft) && (
               <Button size="sm" variant="ghost" onClick={actions.clear}>
                 Limpiar

@@ -1,9 +1,7 @@
-import { useState } from 'react'
 import { RULE_STATUS } from '../../rules/constants'
 import { GENERAL_RULES } from '../../rules/families'
 import { Badge } from '../ui/Badge'
-import { Button } from '../ui/Button'
-import { Card } from '../ui/Card'
+import { InfoPopup } from '../ui/InfoPopup'
 
 const STATUS_BADGE = {
   [RULE_STATUS.CONFIRMED]: { tone: 'ok', label: 'Confirmada' },
@@ -12,54 +10,20 @@ const STATUS_BADGE = {
 }
 
 /**
- * Reglas del motor activo (LS2 o el de la marca) y generales. Colapsable y cerrada por
- * defecto; el encabezado cuenta cuántas reglas hay y cuántas están a validar.
- * Puede ser controlada (open + onToggle) o manejar su propio estado.
+ * Ícono (i) con las reglas del motor activo (LS2 o el de la marca) y las generales.
+ * El título cuenta cuántas reglas hay y cuántas están a validar.
  */
-export function AppliedRules({
-  family,
-  label = family?.label,
-  rules = family?.rules ?? [],
-  generalRules = GENERAL_RULES,
-  open: controlledOpen,
-  onToggle,
-  defaultOpen = false,
-}) {
-  const [ownOpen, setOwnOpen] = useState(defaultOpen)
-  const open = controlledOpen ?? ownOpen
-  const toggle = onToggle ?? (() => setOwnOpen((prev) => !prev))
-
+export function AppliedRulesInfo({ family, label = family?.label, rules = family?.rules ?? [], generalRules = GENERAL_RULES }) {
   const all = [...rules, ...generalRules]
   const pending = all.filter((rule) => rule.status === RULE_STATUS.PENDING).length
-  const title = `Reglas aplicadas · ${all.length} · ${pending} a validar`
 
   return (
-    <Card
-      title={title}
-      className={open ? '' : 'card--collapsed'}
-      aside={
-        <div className="card__actions">
-          <span className="muted small">{label}</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-expanded={open}
-            onClick={toggle}
-            title={open ? 'Ocultar reglas aplicadas' : 'Mostrar reglas aplicadas'}
-          >
-            {open ? 'Cerrar ▴' : 'Abrir ▾'}
-          </Button>
-        </div>
-      }
-    >
-      {open && (
-        <>
-          <RuleList rules={rules} />
-          <h3 className="rules__subtitle">Generales</h3>
-          <RuleList rules={generalRules} />
-        </>
-      )}
-    </Card>
+    <InfoPopup label="Reglas aplicadas" title={`Reglas aplicadas · ${all.length} · ${pending} a validar`} wide>
+      {label && <p className="muted small">{label}</p>}
+      <RuleList rules={rules} />
+      <h3 className="rules__subtitle">Generales</h3>
+      <RuleList rules={generalRules} />
+    </InfoPopup>
   )
 }
 

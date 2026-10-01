@@ -3,6 +3,8 @@ import { ALL_EXISTING_SKUS } from '../data/realData'
 import { nextArticleCode, usedArticleCodes } from '../engines/correlative'
 import { brandHasGenericos, genericosFor, prefixBeforeArticle } from '../engines/engines'
 import { buildEngineProposal, validateEngineRows } from '../engines/proposal'
+import { pendingAltasUsed } from '../reference/store'
+import { useAltas } from '../reference/useAltas'
 import { useExternalLoad } from './useExternalLoad'
 
 const LATENCY_MS = 650
@@ -22,6 +24,7 @@ function summarize(results) {
  * `confirmedItems` se comparte entre marcas para el control de duplicados de la sesión.
  */
 export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfirmed, loadRequest = null, onLoadResult }) {
+  const altas = useAltas()
   const [selections, setSelections] = useState({})
   const [articleMode, setArticleMode] = useState('tabla')
   const [articleLine, setArticleLine] = useState('')
@@ -56,8 +59,13 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
       : (selections.articulo ?? '')
   const effectiveSelections = hasArticle ? { ...selections, articulo: articleValue } : selections
 
-  const genericos = useMemo(() => genericosFor(engine, selections), [engine, selections])
+  // `altas` cambia cuando se crea o acepta un alta: hay que volver a leer los catálogos.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const genericos = useMemo(() => genericosFor(engine, selections), [engine, selections, altas])
   const generico = genericos.find((item) => item.key === genericoKey) ?? null
+  // Datos nuevos (sin aceptar) que usa lo armado: bloquean la confirmación.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pendingAltas = useMemo(() => pendingAltasUsed(engine, effectiveSelections, generico), [engine, effectiveSelections, generico, altas])
   const hasGenericos = brandHasGenericos(engine)
 
   const proposal = useMemo(
@@ -77,7 +85,7 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
 
   const canValidate = proposal.rows.length > 0
   const canConfirm =
-    Boolean(results) && summary.error === 0 && (summary.warn === 0 || warningsAcknowledged) && !isConfirmed
+    Boolean(results) && summary.error === 0 && (summary.warn === 0 || warningsAcknowledged) && !isConfirmed && pendingAltas.length === 0
 
   const stages = {
     data: (Boolean(generico) || !hasGenericos) && proposal.issues.length === 0 && proposal.rows.length > 0,
@@ -180,6 +188,15 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
 
   const confirm = () => {
     if (!canConfirm) return
+    const genericItems = proposal.generics.map((item) => ({
+      sku: item.sku,
+      ean: '',
+      descTango: item.descripcion,
+      talle: '',
+      precio: '',
+      generico: generico?.codigo ?? '',
+      esGenerico: true,
+    }))
     const items = proposal.rows.map((row) => ({
       sku: row.sku,
       ean: onlyDigits(rowData[row.key]?.ean),
@@ -188,8 +205,9 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
       precio: '',
       generico: generico?.codigo ?? '',
     }))
-    onConfirmed(items)
-    setLastConfirmation({ signature, items, familyLabel: `${brandLabel} ${engine.label}`, at: new Date() })
+    const all = [...genericItems, ...items]
+    onConfirmed(all)
+    setLastConfirmation({ signature, items: all, familyLabel: `${brandLabel} ${engine.label}`, at: new Date() })
   }
 
   const startNew = () => {
@@ -218,6 +236,8 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
     warningsAcknowledged,
     canValidate,
     canConfirm,
+    pendingAltas,
+    pendingSkus: proposal.rows.map((row) => row.sku).filter(Boolean),
     isConfirmed,
     lastConfirmation,
     actions: {

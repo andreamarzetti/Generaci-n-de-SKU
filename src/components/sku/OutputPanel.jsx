@@ -8,7 +8,7 @@ const statusBadge = (status) =>
   status === RULE_STATUS.CONFIRMED ? <Badge tone="ok">Confirmada</Badge> : <Badge tone="warn">A validar</Badge>
 
 /** Salida para Tango y GS1: solo se muestra, no se envía a ningún lado. */
-export function OutputPanel({ family, classification, rows, rowData, results }) {
+export function OutputPanel({ family, classification, rows, rowData, results, generics = [] }) {
   const total = rows.length
   const withPrice = rows.filter((row) => String(rowData[row.key]?.precio ?? '').trim()).length
   const eanReady = results
@@ -58,7 +58,10 @@ export function OutputPanel({ family, classification, rows, rowData, results }) 
         <section className="output__block">
           <h3 className="output__title">Archivo de alta para Tango (resumen)</h3>
           <dl className="output__list output__list--compact">
-            <div className="output__row"><dt>Artículos</dt><dd className="strong">{total} + genérico</dd></div>
+            <div className="output__row"><dt>Artículos</dt><dd className="strong">
+                {total} + {generics.length || 'genérico'}
+                {generics.length > 0 && (generics.length === 1 ? ' genérico' : ' genéricos')}
+              </dd></div>
             <div className="output__row"><dt>Unidades de compra</dt><dd className="strong">{total}</dd></div>
             <div className="output__row">
               <dt>Precios · {TANGO_FILE.priceLists} listas por talle</dt>

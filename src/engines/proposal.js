@@ -1,4 +1,5 @@
 import { ALL_EXISTING_EANS, ALL_EXISTING_SKUS } from '../data/realData'
+import { checkGenericExists, genericSkus } from '../rules/genericSku'
 import { CHECKS, checkDuplicate, checkEan, checkLength } from '../rules/validateRows'
 import { brandHasGenericos, decomposeSku } from './engines'
 
@@ -47,7 +48,9 @@ export function buildEngineProposal(engine, { selections = {}, sizes = [], descr
     { id: 'talle', label: 'Talle', value: sizes[0] ?? '', size: 3, variant: 'size' },
   ]
 
-  return { rows, issues, segments, groups: [] }
+  // El genérico es el SKU sin talle; su descripción es la del artículo (sin talle).
+  const generics = genericSkus(rows, () => descripcion.toUpperCase())
+  return { rows, issues, segments, groups: [], generics }
 }
 
 /** Controles de los motores: los mismos que LS2, salvo código de barras y precio (solo LS2). */
@@ -70,6 +73,9 @@ const pending = (message) => ({ status: 'pending', message })
 // El control de LS2 dice "artículos de LS2"; acá se compara contra todas las marcas.
 const withBrandNeutralMessage = (check) =>
   check.message === 'Ya existe en los artículos de LS2' ? { ...check, message: 'Ya existe en los artículos reales' } : check
+
+/** Si el SKU está libre pero su genérico ya existe, se avisa (el genérico se reutiliza). */
+const withGenericWarning = (check, sku, sources) => (check.status === 'ok' ? (checkGenericExists(sku, sources) ?? check) : check)
 
 function countBy(values) {
   return values.reduce((acc, value) => {
@@ -111,7 +117,11 @@ export function validateEngineRows({
           ? ok('Respeta la estructura')
           : error('No respeta la estructura del motor')
         : error(row.buildError ?? 'No se pudo armar el SKU'),
-      duplicate: withBrandNeutralMessage(checkDuplicate(row.sku, { existingSkus, sessionSkus, skuCounts })),
+      duplicate: withGenericWarning(
+        withBrandNeutralMessage(checkDuplicate(row.sku, { existingSkus, sessionSkus, skuCounts })),
+        row.sku,
+        { existingSkus, sessionSkus },
+      ),
       ean: ean ? checkEan(ean, { existingEans, sessionEans, eanCounts }) : notApplicable('Opcional'),
       size: row.size.known
         ? ok(row.size.code ? row.label : 'Sin talle')

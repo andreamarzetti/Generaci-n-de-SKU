@@ -2,7 +2,7 @@ import { Fragment } from 'react'
 import { MAX_SKU_LENGTH } from '../../rules/constants'
 import { Card } from '../ui/Card'
 
-export function SkuComposition({ segments, rowSegments = [], proposal, onChooseFreeDigit, showFreeDigits }) {
+export function SkuComposition({ segments, rowSegments = [], proposal, onChooseFreeDigit, showFreeDigits, info }) {
   const lengths = proposal.rows.filter((row) => row.sku).map((row) => row.sku.length)
   const longest = lengths.length ? Math.max(...lengths) : 0
   const hasPending = segments.some((segment) => segment.pending)
@@ -13,6 +13,7 @@ export function SkuComposition({ segments, rowSegments = [], proposal, onChooseF
     <Card
       title="Composición del SKU"
       className="card--composition"
+      info={info}
       aside={
         <span className={`length-meter ${longest > MAX_SKU_LENGTH ? 'is-error' : longest ? 'is-ok' : ''}`}>
           {longest || '—'} / máx. {MAX_SKU_LENGTH} caracteres
@@ -60,6 +61,17 @@ export function SkuComposition({ segments, rowSegments = [], proposal, onChooseF
         </p>
       )}
 
+      {(proposal.generics ?? []).length > 0 && (
+        <p className="sku-generic">
+          <span className="sku-generic__label">SKU genérico (el mismo SKU sin talle)</span>
+          {proposal.generics.map((item) => (
+            <span key={item.sku} className="mono strong">
+              {item.sku}
+            </span>
+          ))}
+        </p>
+      )}
+
       {showFreeDigits && (
         <div className="free-digits">
           <p className="free-digits__title">
@@ -83,7 +95,7 @@ export function SkuComposition({ segments, rowSegments = [], proposal, onChooseF
                   onChange={(e) => onChooseFreeDigit(group.key, e.target.value)}
                 >
                   {!group.freeDigit && <option value="">Sin dígitos libres</option>}
-                  {group.options.map((option) => (
+                  {visibleFreeDigits(group).map((option) => (
                     <option key={option.value} value={option.value} disabled={Boolean(option.usedIn)}>
                       {option.value} · {option.usedIn ? `en uso en ${option.usedIn}` : 'libre'}
                     </option>
@@ -103,7 +115,7 @@ export function SkuComposition({ segments, rowSegments = [], proposal, onChooseF
         </ul>
       )}
 
-      {hasPending && <p className="footnote">* A validar: rango de dígitos libres 01–09, observado en los datos reales.</p>}
+      {hasPending && <p className="footnote">* Dígitos libres: 01–99 y, si se agotan, alfanuméricos (A1…A0, B1…).</p>}
     </Card>
   )
 }
@@ -129,6 +141,12 @@ function SegmentRow({ segments, error, showMessage = true }) {
       )}
     </>
   )
+}
+
+/** La lista completa tiene más de 600 pares: se muestran los próximos 30 desde el primero libre y el elegido. */
+function visibleFreeDigits(group) {
+  const firstFree = Math.max(group.options.findIndex((option) => !option.usedIn), 0)
+  return group.options.filter((option, index) => index <= firstFree + 30 || option.value === group.freeDigit)
 }
 
 /** Agrupa los SKUs por variante (en la carga masiva de cascos, cada color es una variante). */

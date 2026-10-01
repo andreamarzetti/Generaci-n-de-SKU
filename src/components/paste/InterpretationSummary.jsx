@@ -1,8 +1,9 @@
 import { ALL_GENERICOS, OFFICIAL_SIZES } from '../../data/realData'
 import { BRANDS } from '../../engines/engines'
 import { FAMILY_NAMES } from '../../parsing/catalogs'
-import { STATUS } from '../../parsing/normalize'
+import { field, missing, STATUS } from '../../parsing/normalize'
 import { Button } from '../ui/Button'
+import { DescriptionParts, VariantStatus } from './DescriptionParts'
 import { StatusTag } from './StatusTag'
 
 const edited = (value) => ({ value, status: value ? STATUS.EDITED : STATUS.MISSING, reason: '' })
@@ -14,8 +15,20 @@ const genericLabel = (generico) =>
 
 /** Resumen editable de lo interpretado, antes de cargarlo en la pantalla. */
 export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPrefix = 'solicitud' }) {
-  const { fields, rows, candidates, looseNumbers } = draft
+  const { fields, rows, candidates, looseNumbers, variants = [] } = draft
 
+  // Elegir una variante la selecciona; volver a tocarla la deselecciona.
+  const toggleVariant = (variant) =>
+    onChange({
+      ...draft,
+      fields: {
+        ...fields,
+        descripcion:
+          fields.descripcion.value === variant
+            ? missing(`El mail pide ${variants.length} variantes: elegí cuál cargar`)
+            : field(variant, STATUS.DETECTED, 'Elegida entre las variantes del mail'),
+      },
+    })
   const setField = (name, value) => onChange({ ...draft, fields: { ...fields, [name]: { ...fields[name], ...edited(value) } } })
   const setRow = (index, name, value) =>
     onChange({
@@ -54,6 +67,29 @@ export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPr
 
   return (
     <div className="interpretation">
+      {variants.length > 1 && (
+        <div className="variants" role="group" aria-label="Variantes pedidas en el mail">
+          <p className="variants__title">
+            El mail pide {variants.length} variantes. Se carga una por vez: elegí cuál y después repetí con la siguiente.
+            El mail no indica talles: agregalos abajo con «+ Agregar talle».
+          </p>
+          <ul className="variants__list">
+            {variants.map((variant) => {
+              const selected = fields.descripcion.value === variant
+              return (
+                <li key={variant} className={`variants__item ${selected ? 'variants__item--selected' : ''}`}>
+                  <span className="variants__name">{variant}</span>
+                  <VariantStatus brandId={fields.marca.value} description={variant} />
+                  <Button size="sm" variant={selected ? 'dark' : 'secondary'} aria-pressed={selected} onClick={() => toggleVariant(variant)}>
+                    {selected ? 'Quitar' : 'Usar'}
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       <div className="interpretation__grid">
         <SummaryField id={`${idPrefix}-marca`} label="Marca" field={fields.marca}>
           <select
@@ -124,6 +160,8 @@ export function InterpretationSummary({ draft, onChange, onLoad, loadError, idPr
           />
         </SummaryField>
       </div>
+
+      <DescriptionParts draft={draft} onChange={onChange} />
 
       <div className="table-wrap">
         <table className="table table--compact interpretation__table">
