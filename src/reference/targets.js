@@ -10,7 +10,7 @@ import {
   REGLA_PRODUCTO,
   REGLA_PRODUCTO_GUD,
 } from '../data/realData'
-import { nextArticleCode } from '../engines/correlative'
+import { FREE_DIGIT_RANGE } from '../rules/constants'
 import { BRANDS, CUSTOM_CASCOS } from '../engines/engines'
 import { tangoDescription } from '../rules/descriptions'
 
@@ -206,7 +206,7 @@ const STATIC_TARGETS = [
   }),
   catalogTarget({ id: 'origen-producto', kind: 'origen', label: 'Producto', sheet: SHEETS.producto, codeLength: 1, list: () => REGLA_PRODUCTO.origenes }),
 
-  // ── Código genérico ──
+  // ── Código genérico (solo consulta) ──
   {
     id: 'generico',
     kind: 'generico',
@@ -224,20 +224,9 @@ const STATIC_TARGETS = [
       { name: 'descripcion', label: 'Descripción', required: true, hint: 'Ej.: FF313 AVA AB GRAFICA.' },
     ],
     list: () => ALL_GENERICOS,
-    record: (values) => ({
-      codigo: uppercase(values.codigo),
-      marca: uppercase(values.marca),
-      familia: uppercase(values.familia),
-      tipologia: uppercase(values.tipologia),
-      modelo: uppercase(values.modelo),
-      genero: uppercase(values.genero) || null,
-      descripcion: uppercase(values.descripcion),
-    }),
-    // Un genérico es único por marca, código y modelo (así arma su clave la pantalla).
-    isDuplicate: (values, list) =>
-      list.find(
-        (item) => item.marca === uppercase(values.marca) && item.codigo === uppercase(values.codigo) && item.modelo === uppercase(values.modelo),
-      ),
+    // Solo consulta: el genérico no es un dato de referencia que se carga como alta, se crea al generar el SKU.
+    readOnly: true,
+    readOnlyNote: 'Los códigos genéricos no se cargan como alta: se crean al generar el SKU (el genérico es el mismo SKU sin talle).',
     noCode: true,
   },
 
@@ -312,12 +301,31 @@ const APPLIES = {
   marca: { brands: null, families: null },
 }
 
+const ruleOf = (target) => {
+  const custom = /^(calota|grafica)-(.+)$/.exec(target.id)
+  return APPLIES[target.id] ?? (custom ? { brands: () => [custom[2]], families: () => CASCOS_FAMILIES } : { brands: null, families: null })
+}
+
 /** ¿La tabla corresponde a la marca y familia elegidas? (vacío = cualquiera) */
 export function appliesTo(target, { brand = '', family = '' } = {}) {
-  const custom = /^(calota|grafica)-(.+)$/.exec(target.id)
-  const rule = APPLIES[target.id] ?? (custom ? { brands: () => [custom[2]], families: () => CASCOS_FAMILIES } : { brands: null, families: null })
+  const rule = ruleOf(target)
   return (!brand || !rule.brands || rule.brands().includes(brand)) && (!family || !rule.families || rule.families().includes(family))
 }
+
+/** Marcas a las que sirve una tabla (null = a todas). */
+export const brandsOf = (target) => ruleOf(target).brands?.() ?? null
+
+/**
+ * Tablas en las que se puede dar de alta algo para una marca. No están la marca nueva (no depende de una marca)
+ * ni las tablas de solo consulta (los genéricos).
+ */
+export const targetsOfBrand = (brand) => getTargets().filter((target) => target.kind !== 'marca' && !target.readOnly && appliesTo(target, { brand }))
+
+/** Qué tipos de alta admite una marca, en el orden de siempre. */
+export const kindsOfBrand = (brand) => Object.keys(KINDS).filter((kind) => targetsOfBrand(brand).some((target) => target.kind === kind))
+
+/** Valor del selector de marca para dar de alta una marca nueva. */
+export const NEW_BRAND = '__nueva__'
 
 /** Familias de producto, para el filtro. */
 export const familyNames = () => productFamilies()
@@ -331,6 +339,71 @@ const plantillaOf = (brand) => {
   const ids = (brand.lines ?? []).map((line) => line.id)
   if (ids.includes('cascos') && ids.includes('producto')) return 'ambos'
   return ids[0] ?? 'propio'
+}
+
+/** Códigos que figuran más de una vez en una lista de registros. */
+export function repeatedCodes(records) {
+  const counts = new Map()
+  records.forEach(({ values }) => {
+    if (values.codigo) counts.set(values.codigo, (counts.get(values.codigo) ?? 0) + 1)
+  })
+  return new Set([...counts].filter(([, times]) => times > 1).map(([code]) => code))
+}
+
+/** Combinaciones de ámbito (familia, línea…) de una tabla: una por cada valor posible. */
+function scopeCombos(target) {
+  return target.scopeFields.reduce(
+    (combos, field) => combos.flatMap((combo) => field.options().map((option) => ({ ...combo, [field.name]: option.value }))),
+    [{}],
+  )
+}
+
+/**
+ * Todos los códigos que figuran más de una vez en las tablas de referencia que corresponden a la marca y
+ * familia elegidas (sin filtro: todas). Es lo que usan los SKU para armarse: si un código sirve para dos
+ * nombres, dos productos distintos pueden quedar con el mismo código. No incluye las altas de la herramienta
+ * (se validan para que no repitan) ni los códigos genéricos (se crean al generar el SKU, no son datos de referencia).
+ * @returns {{ id, targetId, kind, tabla, ambito, scope, codigo, nombres: string[], veces: number, conflicto: boolean }[]}
+ *   `conflicto` = nombres distintos para el mismo código; si no, es el mismo nombre en filas repetidas.
+ */
+export function duplicateCases({ brand = '', family = '' } = {}) {
+  const cases = []
+  getTargets()
+    .filter((target) => target.kind !== 'marca' && target.kind !== 'generico' && target.fields.some((field) => field.name === 'codigo') && appliesTo(target, { brand, family }))
+    .forEach((target) => {
+      scopeCombos(target).forEach((scope) => {
+        if (family && scope.familia && scope.familia !== family) return
+        const records = listRecords(target, scope).filter((record) => !record.alta)
+
+        const names = new Map()
+        records.forEach(({ values }) => names.set(values.codigo, [...(names.get(values.codigo) ?? []), values.descripcion ?? '']))
+        names.forEach((list, codigo) => {
+          if (list.length < 2) return
+          const nombres = [...new Set(list)]
+          cases.push({
+            id: `${target.id}|${JSON.stringify(scope)}|${codigo}`,
+            targetId: target.id,
+            kind: target.kind,
+            tabla: `${KINDS[target.kind]} · ${target.label}`,
+            ambito: Object.values(scope).join(' · '),
+            scope,
+            codigo,
+            nombres,
+            veces: list.length,
+            conflicto: nombres.length > 1,
+          })
+        })
+      })
+    })
+  // Primero los que mezclan nombres distintos (los que importan), después los de un mismo nombre repetido.
+  return cases.sort((a, b) => Number(b.conflicto) - Number(a.conflicto) || a.tabla.localeCompare(b.tabla) || a.ambito.localeCompare(b.ambito) || a.codigo.localeCompare(b.codigo))
+}
+
+/** Filtra los registros de una tabla por lo que se escribió, en cualquier columna (sin distinguir mayúsculas). */
+export function searchRecords(records, columns, query) {
+  const needle = String(query ?? '').trim().toUpperCase()
+  if (!needle) return records
+  return records.filter(({ values }) => columns.some((field) => String(values[field.name] ?? '').toUpperCase().includes(needle)))
 }
 
 /** Columnas de la tabla de un destino: sus campos, sin los que solo eligen el ámbito (familia, línea). */
@@ -349,51 +422,81 @@ export function listRecords(target, scope = {}) {
 }
 
 /**
- * Controla un alta antes de guardarla. Devuelve { errors: { campo: mensaje }, duplicate }.
- * `duplicate` es el registro ya existente que choca, para explicarlo.
+ * Controla un alta: devuelve { errors: { campo: mensaje }, duplicate }. Cada campo se controla por separado,
+ * así el formulario puede marcar en vivo el que no se puede usar (ej. un código que ya existe) aunque falten otros.
+ * `duplicate` es el primer registro ya existente que choca, para explicarlo.
  */
 export function validateAlta(target, values) {
   const errors = {}
+  const text = (name) => String(values[name] ?? '').trim()
   target.fields.forEach((field) => {
-    if (field.required && !String(values[field.name] ?? '').trim()) errors[field.name] = 'Completá este dato.'
+    if (field.required && !text(field.name)) errors[field.name] = 'Completá este dato.'
   })
 
   const code = uppercase(values.codigo)
-  if (target.codeLength && code) {
-    if (code.length !== target.codeLength || !PATTERN.test(code)) {
-      errors.codigo = `Debe tener ${target.codeLength} caracteres: letras mayúsculas y números.`
-    }
+  if (target.codeLength && code && (code.length !== target.codeLength || !PATTERN.test(code))) {
+    errors.codigo = `Debe tener ${target.codeLength} caracteres: letras mayúsculas y números.`
   }
 
+  // Los repetidos solo se buscan si ya se eligió el ámbito (familia, línea) de la tabla.
+  const scopeReady = target.scopeFields.every((field) => !field.required || text(field.name))
+  const name = uppercase(values.descripcion)
   let duplicate = null
-  if (Object.keys(errors).length === 0) {
+  if (scopeReady) {
     const list = target.list(values) ?? []
     if (target.kind === 'marca') {
-      duplicate = BRANDS.find((brand) => brand.id === code || brand.label === uppercase(values.descripcion))
-      if (duplicate) errors.codigo = `Ya existe la marca ${duplicate.label} (${duplicate.id}).`
-    } else if (target.isDuplicate) {
-      duplicate = target.isDuplicate(values, list)
-      if (duplicate) errors.codigo = `Ya existe ese genérico para ${duplicate.marca} (${duplicate.modelo}).`
+      const sameCode = code && !errors.codigo ? BRANDS.find((brand) => brand.id === code) : null
+      const sameName = name ? BRANDS.find((brand) => brand.label === name) : null
+      if (sameCode) errors.codigo = `Ya existe la marca ${sameCode.label} (${sameCode.id}).`
+      if (sameName) errors.descripcion = `Ya existe la marca ${sameName.label} (${sameName.id}).`
+      duplicate = sameCode ?? sameName
     } else if (target.kind === 'color' && target.noCode) {
-      duplicate = list.find((item) => item.ingles === uppercase(values.ingles))
+      const english = uppercase(values.ingles)
+      duplicate = english ? list.find((item) => item.ingles === english) : null
       if (duplicate) errors.ingles = `Ya está en la tabla (${duplicate.abreviatura}).`
     } else {
-      duplicate = list.find((item) => item.codigo === code)
-      if (duplicate) errors.codigo = `El código ${code} ya lo usa ${duplicate.descripcion}.`
-      else {
-        const sameName = list.find((item) => item.descripcion === uppercase(values.descripcion))
-        if (sameName) errors.descripcion = `Ya existe con el código ${sameName.codigo}.`
-      }
+      const sameCode = code && !errors.codigo ? list.find((item) => item.codigo === code) : null
+      const sameName = name ? list.find((item) => item.descripcion === name) : null
+      if (sameCode) errors.codigo = `El código ${code} ya lo usa ${sameCode.descripcion}.`
+      if (sameName) errors.descripcion = `Ya existe con el código ${sameName.codigo}.`
+      duplicate = sameCode ?? sameName
     }
   }
   return { errors, duplicate }
 }
 
-/** Código sugerido: el siguiente libre de la secuencia (01–99, AA…) en tablas de 2 caracteres. */
+/**
+ * Código sugerido en tablas de 2 caracteres: el siguiente al último que tiene la tabla, en el orden de los
+ * códigos (01–99, A1…A9, A0, B1… Z0, 1A…0Z), saltando los que ya están usados. Se parte del último de la tabla
+ * y no del más alto: hay códigos sueltos más adelante (ej. colores de cascos: la tabla llega a J4 y hay un K0).
+ */
 export function suggestCode(target, values = {}) {
   if (target.codeLength !== 2) return ''
-  const used = new Set((target.list(values) ?? []).map((item) => item.codigo))
-  return nextArticleCode(used) ?? ''
+  const list = target.list(values) ?? []
+  const used = new Set(list.map((item) => item.codigo))
+  const last = list.map((item) => item.codigo).filter((code) => FREE_DIGIT_RANGE.includes(code)).at(-1)
+  const from = last ? FREE_DIGIT_RANGE.indexOf(last) + 1 : 0
+  return [...FREE_DIGIT_RANGE.slice(from), ...FREE_DIGIT_RANGE.slice(0, from)].find((code) => !used.has(code)) ?? ''
+}
+
+const PLANTILLA_SHORT = { cascos: 'Cascos', producto: 'Producto', ambos: 'Cascos y producto' }
+
+/**
+ * Una fila real de la tabla (no una alta) para mostrar al lado de cada campo: qué se espera cargar.
+ * Devuelve { campo: texto }. En las tablas con ámbito (familia, línea) usa el elegido o, si no, el primero.
+ */
+export function exampleOf(target, values = {}) {
+  if (target.kind === 'marca') {
+    const brand = BRANDS.find((item) => item.id === 'UBX') ?? BRANDS.find((item) => item.lines)
+    return { codigo: brand.id, descripcion: brand.label, plantilla: PLANTILLA_SHORT[plantillaOf(brand)] }
+  }
+
+  const scope = Object.fromEntries(target.scopeFields.map((field) => [field.name, values[field.name] || field.options()[0]?.value || '']))
+  const list = (target.list({ ...values, ...scope }) ?? []).filter((item) => !item.alta)
+  const fields = target.fields.filter((field) => !target.scopeFields.includes(field))
+  const complete = (item) => fields.every((field) => item[field.name])
+  const record = [...list].reverse().find(complete) ?? list.at(-1) ?? {}
+  return { ...scope, ...Object.fromEntries(fields.map((field) => [field.name, record[field.name] ?? ''])) }
 }
 
 export const isAltaComplete = (target, values) => Object.keys(validateAlta(target, values).errors).length === 0

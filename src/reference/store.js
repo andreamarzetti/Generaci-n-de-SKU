@@ -1,10 +1,9 @@
-// Altas de referencia: lo que el usuario crea (marca, modelo, gráfica, color, genérico…) y todavía
+// Altas de referencia: lo que el usuario crea (marca, modelo, gráfica, color, tipología…) y todavía
 // no está en CODIFICACION 2023. Se guarda en el navegador y se agrega a los catálogos en memoria,
 // para que los motores y la interpretación del mail lo reconozcan. Después se exporta a Excel.
 //
 // Una alta nace "pendiente": se puede elegir, pero los SKU que la usan quedan bloqueados
 // hasta que el usuario acepta su creación.
-import { ALL_GENERICOS, GENERICOS } from '../data/realData'
 import { BRANDS, CUSTOM_CASCOS, ENGINES, cascosEngine, productEngine } from '../engines/engines'
 import { BRAND_NAMES } from '../parsing/catalogs'
 import { getTarget, validateAlta } from './targets'
@@ -64,17 +63,12 @@ function applyBrand(entry, record) {
 
 function applyEntry(entry) {
   const target = getTarget(entry.target)
-  if (!target) return false
+  // Las tablas de solo consulta (genéricos) no admiten altas: si quedó una guardada de antes, se descarta.
+  if (!target || target.readOnly) return false
   const record = { ...target.record(entry.values), alta: entry.id }
 
   if (target.kind === 'marca') applyBrand(entry, record)
-  else if (target.kind === 'generico') {
-    ALL_GENERICOS.push({ ...record, key: `${record.marca}|${record.codigo}|${record.modelo}` })
-    if (record.marca === 'LS2') {
-      const { marca, ...rest } = record
-      GENERICOS.push({ ...rest, key: `${record.codigo}|${record.modelo}` })
-    }
-  } else target.list(entry.values).push(record)
+  else target.list(entry.values).push(record)
   return true
 }
 
@@ -92,9 +86,6 @@ function unapplyEntry(entry) {
     delete ENGINES[`cascos${code}`]
     delete ENGINES[`producto${code}`]
     delete CUSTOM_CASCOS[code]
-  } else if (target.kind === 'generico') {
-    drop(ALL_GENERICOS)
-    drop(GENERICOS)
   } else drop(target.list(entry.values))
 }
 
@@ -106,6 +97,7 @@ const newId = () => `alta-${Date.now().toString(36)}-${(counter += 1)}`
 export function createAlta(targetId, values) {
   const target = getTarget(targetId)
   if (!target) return { ok: false, errors: { _: 'No se reconoce qué se quiere dar de alta.' } }
+  if (target.readOnly) return { ok: false, errors: { _: target.readOnlyNote } }
   const { errors } = validateAlta(target, values)
   if (Object.keys(errors).length) return { ok: false, errors }
 
@@ -157,8 +149,8 @@ export function removeAlta(id) {
   return { ok: true }
 }
 
-/** Altas pendientes que usa una selección de un motor (o un genérico). */
-export function pendingAltasUsed(engine, selections = {}, generico = null) {
+/** Altas pendientes que usa una selección de un motor. */
+export function pendingAltasUsed(engine, selections = {}) {
   const ids = new Set()
   if (engine) {
     const brand = BRANDS.find((item) => item.id === engine.brand)
@@ -170,7 +162,6 @@ export function pendingAltasUsed(engine, selections = {}, generico = null) {
       options.filter((option) => option.code === value && option.alta).forEach((option) => ids.add(option.alta))
     })
   }
-  if (generico?.alta) ids.add(generico.alta)
   return [...ids].filter(isPendingAlta).map(getAlta)
 }
 

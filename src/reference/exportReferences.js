@@ -1,7 +1,7 @@
 // Excel de "Altas de referencia": un archivo aparte, sin tocar CODIFICACION 2023. Cada hoja trae
 // solo las filas nuevas, con las columnas de la tabla de origen, listas para pegar donde corresponde.
 import { ALTA_STATUS, getAlta } from './store'
-import { getTarget, tableColumns } from './targets'
+import { getTarget, listRecords, tableColumns } from './targets'
 
 const PLANTILLAS = { cascos: 'Cascos', producto: 'Producto', ambos: 'Cascos y producto' }
 const STATUS_LABEL = { [ALTA_STATUS.PENDING]: 'Pendiente de aceptar', [ALTA_STATUS.ACCEPTED]: 'Aceptada' }
@@ -73,12 +73,6 @@ const KIND_SHEETS = [
     headers: ['Hoja de CODIFICACION 2023', 'Código', 'Descripción'],
     row: ({ values }, target) => [target.sheet, values.codigo, values.descripcion],
   },
-  {
-    kind: 'generico',
-    name: 'Genericos',
-    headers: ['Código', 'Marca', 'Familia', 'Tipología', 'Modelo', 'Género', 'Descripción'],
-    row: ({ values }) => [values.codigo, values.marca, values.familia, values.tipologia, values.modelo, values.genero ?? '', values.descripcion],
-  },
 ]
 
 const SUMMARY_HEADERS = ['Tipo', 'Ámbito', 'Código', 'Nombre', 'Hoja de CODIFICACION 2023', ...TRAILING_HEADERS]
@@ -108,6 +102,42 @@ export function altasSheets(entries) {
 
   return [summary, ...bySheet]
 }
+
+/** Hoja con los códigos repetidos de todas las tablas (o de las filtradas). */
+export function duplicatesSheet(cases) {
+  return {
+    name: 'Codigos repetidos',
+    headers: ['Tabla', 'Ámbito', 'Código', 'Nombres que lo usan', 'Veces', 'Situación'],
+    rows: cases.map((item) => [item.tabla, item.ambito, item.codigo, item.nombres.join(' / '), item.veces, item.conflicto ? 'Nombres distintos' : 'Mismo nombre repetido']),
+  }
+}
+
+/**
+ * Una hoja por tabla con los casos completos: cada fila real que usa un código repetido, con todas las columnas de la
+ * tabla de origen (código, nombre, abreviatura, equivalente…) y su estado. Las filas del mismo código quedan juntas.
+ */
+export function duplicateCasesSheets(cases) {
+  const byTarget = new Map()
+  cases.forEach((item) => byTarget.set(item.targetId, [...(byTarget.get(item.targetId) ?? []), item]))
+  const used = new Set()
+  return [...byTarget.entries()].map(([targetId, items]) => {
+    const target = getTarget(targetId)
+    const columns = tableColumns(target)
+    const withScope = items.some((item) => item.ambito)
+    const rows = []
+    items.forEach((item) => {
+      listRecords(target, item.scope)
+        .filter(({ alta, values }) => !alta && values.codigo === item.codigo)
+        .forEach(({ values }) => rows.push([...(withScope ? [item.ambito] : []), ...columns.map((field) => values[field.name] ?? ''), 'Existente']))
+    })
+    let name = `${target.kindLabel ?? ''} - ${target.label}`.replace(/[\[\]:*?/\\]/g, ' ').slice(0, 31).trim()
+    for (let n = 2; used.has(name); n++) name = `${name.slice(0, 28)} ${n}`
+    used.add(name)
+    return { name, headers: [...(withScope ? ['Ámbito'] : []), ...columns.map((field) => field.label), 'Estado'], rows }
+  })
+}
+
+export const duplicatesFileName = (date = new Date()) => `Codigos repetidos - ${date.toISOString().slice(0, 10)}.xlsx`
 
 /** Hoja con una tabla completa (lo que ya existe y las altas), con la columna Estado al principio. */
 export function tableSheet(target, records) {
@@ -143,5 +173,6 @@ export async function downloadSheets(sheetList, fileName) {
   await writeExcelFile(sheets).toFile(fileName)
 }
 
+export const downloadDuplicates = (cases, fileName = duplicatesFileName()) => downloadSheets([duplicatesSheet(cases), ...duplicateCasesSheets(cases)], fileName)
 export const downloadAltas = (entries, fileName = altasFileName()) => downloadSheets(altasSheets(entries), fileName)
 export const downloadTable = (target, records, fileName = tableFileName(target)) => downloadSheets([tableSheet(target, records)], fileName)

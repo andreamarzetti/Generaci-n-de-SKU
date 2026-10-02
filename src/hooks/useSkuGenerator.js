@@ -60,7 +60,7 @@ export function useSkuGenerator({ loadRequest = null, onLoadResult } = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const genericos = useMemo(() => genericosForFamily(family.familia), [family, altas])
   const generico = findGenerico(form.generico)
-  const pendingAltas = useMemo(() => pendingAltasUsed(null, {}, generico), [generico, altas])
+  const pendingAltas = useMemo(() => pendingAltasUsed(null), [altas])
 
   // Lo confirmado en la sesión cuenta como usado, salvo el lote recién confirmado
   // mientras se muestra, para que la propuesta no cambie debajo.

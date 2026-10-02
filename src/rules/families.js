@@ -207,11 +207,6 @@ export const GENERAL_RULES = [
     status: CONFIRMED,
     source: SOURCES.AREA_RULE,
   },
-  {
-    text: 'Un genérico nuevo (alta de referencia) queda pendiente: el SKU que lo usa se bloquea hasta aceptar su creación.',
-    status: CONFIRMED,
-    source: SOURCES.AREA_RULE,
-  },
   { text: 'EAN de 13 dígitos con dígito verificador válido.', status: CONFIRMED, source: SOURCES.GS1 },
   {
     text: 'Descripción Tango: colores en inglés → abreviatura (seguidos, unidos con "/"), GLOSS → GS, MATT/MATTE → MT y el talle al final.',

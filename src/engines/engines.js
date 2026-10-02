@@ -390,7 +390,7 @@ export const ENGINE_GENERAL_RULES = [
     source: SOURCES.AREA_RULE,
   },
   {
-    text: 'Datos nuevos (marca, modelo, gráfica, color, genérico) se dan de alta en «Altas de referencia»: los SKU que los usan se bloquean hasta aceptar su creación.',
+    text: 'Datos nuevos (marca, modelo, gráfica, color) se dan de alta en «Altas de referencia»: los SKU que los usan se bloquean hasta aceptar su creación.',
     status: RULE_STATUS.CONFIRMED,
     source: SOURCES.AREA_RULE,
   },

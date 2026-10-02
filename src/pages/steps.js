@@ -1,5 +1,5 @@
 /**
- * Pasos del flujo: 1 Datos · 2 Propuesta · 3 Validar y confirmar.
+ * Pasos del flujo: 1 Datos · 2 Propuesta · 3 Validar y confirmar · 4 Imágenes.
  * Cada paso se marca como completo recién cuando se cumple su condición; el paso
  * actual lo decide el usuario (siguiente, anterior o clic en el número).
  */
@@ -13,5 +13,6 @@ export function buildSteps(stages) {
       done: Boolean(stages.confirmation),
       error: stages.validation === 'error',
     },
+    { id: 'imagenes', label: 'Imágenes', done: Boolean(stages.images) },
   ]
 }

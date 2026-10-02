@@ -73,10 +73,10 @@ export function useEngineGenerator(engine, { brandLabel, confirmedItems, onConfi
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const pendingAltas = useMemo(() => {
     const used = batch
-      ? batch.variants.flatMap((variant) => pendingAltasUsed(engine, variant.selections, generico))
-      : pendingAltasUsed(engine, effectiveSelections, generico)
+      ? batch.variants.flatMap((variant) => pendingAltasUsed(engine, variant.selections))
+      : pendingAltasUsed(engine, effectiveSelections)
     return [...new Map(used.map((alta) => [alta.id, alta])).values()]
-  }, [engine, effectiveSelections, generico, altas, batch])
+  }, [engine, effectiveSelections, altas, batch])
   const hasGenericos = brandHasGenericos(engine)
 
   const proposal = useMemo(

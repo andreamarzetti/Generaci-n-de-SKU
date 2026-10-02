@@ -1,7 +1,50 @@
-import { ALL_ARTICLES, ALL_EXISTING_SKUS, EXISTING_ARTICLES, EXISTING_SKUS, SIZE_TABLE } from '../data/realData'
+import {
+  ALL_ARTICLES,
+  ALL_EXISTING_SKUS,
+  EXISTING_ARTICLES,
+  EXISTING_SKUS,
+  REGLA_CASCOS,
+  REGLA_CASCOS_GUD,
+  REGLA_PRODUCTO,
+  REGLA_PRODUCTO_GUD,
+  SIZE_TABLE,
+} from '../data/realData'
 import { decomposeSku, ENGINES } from '../engines/engines'
 import { MAX_SKU_LENGTH } from './constants'
 import { normalizeSize } from './sizes'
+
+/** Tablas de referencia donde un código identifica una sola cosa (los SKU se arman con él). */
+const CODE_TABLES = [
+  ['Colores de cascos (MAC / URBAX)', () => REGLA_CASCOS.colores],
+  ['Colores de producto (MAC / NTO / 921)', () => REGLA_PRODUCTO.colores],
+  ['Calotas de MAC', () => REGLA_CASCOS.calotasMAC],
+  ['Gráficas de URBAX', () => REGLA_CASCOS.graficasURBAX],
+  ['Gráficas de MAC', () => REGLA_CASCOS.graficasMAC],
+  ['Tipologías de cascos', () => REGLA_CASCOS.tipologias],
+  ['Tipologías de cascos GUD', () => REGLA_CASCOS_GUD.tipologias],
+  ['Tipologías de producto GUD', () => REGLA_PRODUCTO_GUD.tipologias],
+]
+
+/**
+ * Auditoría informativa: códigos que figuran en una tabla de referencia para más de un nombre distinto
+ * (ej. el código de color I9 para dos colores). Con eso dos SKU distintos pueden quedar con el mismo código.
+ * Un mismo nombre repetido no cuenta, y las altas nuevas de la herramienta tampoco.
+ * @returns {{ tabla: string, repetidos: { codigo: string, nombres: string[] }[] }[]}
+ */
+export function auditDuplicateCodes(tables = CODE_TABLES) {
+  return tables
+    .map(([tabla, getList]) => {
+      const names = new Map()
+      getList()
+        .filter((item) => !item.alta)
+        .forEach((item) => names.set(item.codigo, [...(names.get(item.codigo) ?? []), item.descripcion]))
+      const repetidos = [...names]
+        .map(([codigo, list]) => ({ codigo, nombres: [...new Set(list)] }))
+        .filter((item) => item.nombres.length > 1)
+      return { tabla, repetidos }
+    })
+    .filter((table) => table.repetidos.length > 0)
+}
 
 // "XX", "SS"… son la descripción de un talle en la tabla oficial (XX = 2X).
 const SIZE_BY_DESCRIPTION = Object.fromEntries(SIZE_TABLE.map((row) => [row.descripcion, row.talle]))

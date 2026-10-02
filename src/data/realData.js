@@ -22,7 +22,17 @@ export const ALL_GENERICOS = data.genericos.map((generico) => ({
 
 /** Catálogos de cada estructura. */
 export const REGLA_CASCOS = data.reglaCascos
-export const REGLA_PRODUCTO = data.reglaProducto
+/**
+ * En la hoja REFERENCIA PRODUCTO, debajo de la lista de colores (columnas V–X) hay otras tablas en las mismas
+ * columnas: «INDUMENTARIA / 6» (MUSCULOSA, JERSEY, CALZA CORTA…). Son tipos de indumentaria, no colores: el JSON las
+ * trae pegadas a la lista de colores, así que se cortan en la primera (MUSCULOSA) para que no figuren como colores
+ * ni como códigos repetidos (ej. 25 = VERDE FLUO y 25 = JERSEY son categorías distintas).
+ */
+const primerTipoDeIndumentaria = data.reglaProducto.colores.findIndex((item) => item.descripcion === 'MUSCULOSA')
+export const REGLA_PRODUCTO = {
+  ...data.reglaProducto,
+  colores: primerTipoDeIndumentaria < 0 ? data.reglaProducto.colores : data.reglaProducto.colores.slice(0, primerTipoDeIndumentaria),
+}
 export const REGLA_PRODUCTO_GUD = data.reglaProductoGUD
 export const REGLA_CASCOS_GUD = data.reglaCascosGUD
 export const REGLA_MUESTRAS = data.reglaMuestras

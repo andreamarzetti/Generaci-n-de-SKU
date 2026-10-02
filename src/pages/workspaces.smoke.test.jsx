@@ -134,9 +134,11 @@ describe('SkuGeneratorPage', () => {
       expect(visiblePanel(view)).toBe('Paso 2: Propuesta')
       act(() => button(view, 'Siguiente').click())
       expect(visiblePanel(view)).toBe('Paso 3: Validar y confirmar')
+      act(() => button(view, 'Siguiente').click())
+      expect(visiblePanel(view)).toBe('Paso 4: Imágenes')
       expect(button(view, 'Siguiente').disabled).toBe(true)
       act(() => button(view, 'Anterior').click())
-      expect(visiblePanel(view)).toBe('Paso 2: Propuesta')
+      expect(visiblePanel(view)).toBe('Paso 3: Validar y confirmar')
     })
 
     it('al hacer clic en un número va directo a ese paso', () => {
@@ -184,15 +186,11 @@ describe('altas de referencia', () => {
 
     act(() => buttonWith(view, 'Nueva alta').click())
     const dialog = view.querySelector('[role="dialog"]')
+    // Marca URBAX (por defecto) → gráfica: la tabla queda elegida sola.
     act(() => {
-      const select = dialog.querySelector('select')
+      const select = dialog.querySelector('#alta-dialog-tipo')
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'grafica')
       select.dispatchEvent(new Event('change', { bubbles: true }))
-    })
-    act(() => {
-      const target = dialog.querySelectorAll('select')[1]
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(target, 'grafica-UBX')
-      target.dispatchEvent(new Event('change', { bubbles: true }))
     })
     typeInto(dialog.querySelector('#alta-dialog-codigo'), '80')
     typeInto(dialog.querySelector('#alta-dialog-descripcion'), 'dragon')
@@ -391,6 +389,67 @@ describe('SKU genérico en pantalla', () => {
     expect(rows[0]).toContain('UBX103132250')
     expect(rows[0]).toContain('Genérico')
     expect(rows[1]).toContain('UBX103132250.S')
+  })
+})
+
+describe('paso 4 · imágenes', () => {
+  const buttonWith = (view, text) => [...view.querySelectorAll('button')].find((b) => b.textContent.includes(text))
+  const panel = (view) => view.querySelector('.wizard__panel[aria-label="Paso 4: Imágenes"]')
+  const file = (name, type = 'image/png', size = 1000) => {
+    const f = new File(['x'], name, { type })
+    Object.defineProperty(f, 'size', { value: size })
+    return f
+  }
+  const pick = (input, files) => {
+    Object.defineProperty(input, 'files', { value: files, configurable: true })
+    act(() => input.dispatchEvent(new Event('change', { bubbles: true })))
+  }
+  const confirmed = async () => {
+    const brand = BRANDS.find((item) => item.id === 'UBX')
+    const request = {
+      nonce: 1,
+      target: 'engine',
+      engineId: ENGINES.cascosUBX.id,
+      payload: {
+        selections: { tipologia: '10', calota: '313', grafica: '22', color: '50' },
+        sizes: ['.S', '.M'],
+        descripcion: 'FF313 AVA ARCANO GLOSS BLACK RED',
+        genericoKey: 'UBX|UBX010313AB-GR|AVA',
+        rowData: {},
+      },
+    }
+    const view = mount(<EngineWorkspace brand={brand} engine={ENGINES.cascosUBX} confirmedItems={[]} onConfirmed={noop} loadRequest={request} />)
+    return view
+  }
+
+  it('antes de confirmar pide confirmar los SKU', async () => {
+    const view = await confirmed()
+    expect(panel(view).textContent).toContain('Confirmá los SKU en el paso 3')
+    expect(panel(view).querySelector('input[type="file"]')).toBeNull()
+  })
+
+  it('confirmados los SKU, permite cargar, marcar la principal y quitar imágenes por variante', async () => {
+    const view = await confirmed()
+    act(() => buttonWith(view, 'Ejecutar validaciones').click())
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 800))
+    })
+    act(() => buttonWith(view, 'Confirmar SKU').click())
+
+    expect(panel(view).querySelectorAll('.images__group')).toHaveLength(1)
+    const input = panel(view).querySelector('input[type="file"]')
+    pick(input, [file('frente.png'), file('lado.jpg', 'image/jpeg'), file('doc.pdf', 'application/pdf'), file('grande.png', 'image/png', 6 * 1024 * 1024)])
+
+    expect(panel(view).querySelectorAll('.images__item')).toHaveLength(2)
+    expect(panel(view).querySelector('.images__errors').textContent).toContain('doc.pdf')
+    expect(panel(view).querySelector('.images__errors').textContent).toContain('grande.png')
+    expect(panel(view).querySelector('.images__item').textContent).toContain('Principal')
+
+    act(() => buttonWith(panel(view), 'Hacer principal').click())
+    expect(panel(view).querySelector('.images__item').textContent).toContain('lado.jpg')
+
+    act(() => panel(view).querySelector('.images__item .link-button--danger').click())
+    expect(panel(view).querySelectorAll('.images__item')).toHaveLength(1)
   })
 })
 
@@ -1068,5 +1127,535 @@ describe('casos sin problemas en la validación y la confirmación', () => {
     act(() => byText(view, 'Confirmar SKU').click())
     expect(view.querySelector('.creation')).toBeNull()
     expect(view.querySelector('.confirmation').textContent).toContain('2 SKUs confirmados + 1 genérico')
+  })
+})
+
+describe('carga de altas: todas las marcas y un ejemplo al lado de cada campo', () => {
+  const buttonWith = (view, text) => [...view.querySelectorAll('button')].find((b) => b.textContent.includes(text))
+  const select = (root, id, value) =>
+    act(() => {
+      const element = root.querySelector(id)
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(element, value)
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  const openForm = () => {
+    const view = mount(<App />)
+    act(() => [...view.querySelectorAll('.sidebar__link')].find((a) => a.textContent.includes('Altas de referencia')).click())
+    act(() => buttonWith(view, 'Nueva alta').click())
+    return { view, dialog: view.querySelector('[role="dialog"]') }
+  }
+  const kindsOf = (dialog) => [...dialog.querySelectorAll('#alta-dialog-tipo option')].map((option) => option.value)
+
+  it('el selector de marca ofrece todas las marcas y "Marca nueva"', () => {
+    const { dialog } = openForm()
+    const labels = [...dialog.querySelectorAll('#alta-dialog-pick-marca option')].map((option) => option.textContent)
+    ;['LS2', 'MAC', 'URBAX', 'NTO', 'GUD', '921', 'Marca nueva…'].forEach((label) => expect(labels).toContain(label))
+  })
+
+  it('cada marca ofrece solo lo que le corresponde', () => {
+    const { dialog } = openForm()
+    select(dialog, '#alta-dialog-pick-marca', 'NTO')
+    // NTO es de producto: sin calotas ni gráficas, con artículos, colores y tipologías.
+    expect(kindsOf(dialog)).not.toContain('calota')
+    expect(kindsOf(dialog)).not.toContain('grafica')
+    expect(kindsOf(dialog)).toEqual(expect.arrayContaining(['articulo', 'color', 'tipologia']))
+    expect(dialog.textContent).toContain('Producto: origen + marca + familia')
+
+    select(dialog, '#alta-dialog-pick-marca', 'MAC')
+    expect(kindsOf(dialog)).toEqual(expect.arrayContaining(['calota', 'grafica', 'articulo']))
+
+    select(dialog, '#alta-dialog-pick-marca', 'LS2')
+    expect(kindsOf(dialog)).toEqual(['color'])
+    expect(dialog.textContent).toContain('LS2 no codifica calotas ni gráficas')
+    expect(dialog.textContent).toContain('El código genérico se crea al generar el SKU')
+  })
+
+  it('GUD tiene tablas de cascos y de producto: se elige cuál', () => {
+    const { dialog } = openForm()
+    select(dialog, '#alta-dialog-pick-marca', 'GUD')
+    select(dialog, '#alta-dialog-tipo', 'color')
+    const targets = [...dialog.querySelectorAll('#alta-dialog-destino option')].map((option) => option.textContent)
+    expect(targets).toEqual(['Cascos GUD', 'Producto GUD'])
+  })
+
+  it('una marca nueva se da de alta desde el mismo selector', () => {
+    const { dialog } = openForm()
+    select(dialog, '#alta-dialog-pick-marca', '__nueva__')
+    expect(dialog.querySelector('#alta-dialog-tipo')).toBeNull()
+    expect(dialog.querySelector('#alta-dialog-plantilla')).not.toBeNull()
+  })
+
+  it('el formulario no ofrece códigos genéricos para ninguna marca: se crean al generar el SKU', () => {
+    const { dialog } = openForm()
+    ;['LS2', 'MAC', 'UBX', 'NTO', 'GUD', '921'].forEach((brand) => {
+      select(dialog, '#alta-dialog-pick-marca', brand)
+      expect(kindsOf(dialog)).not.toContain('generico')
+    })
+  })
+
+  it('cada campo muestra un ejemplo real al lado', () => {
+    const { dialog } = openForm()
+    // URBAX → calota: ejemplo de una calota que ya existe.
+    const code = dialog.querySelector('.alta-example[data-field="codigo"]').textContent
+    const name = dialog.querySelector('.alta-example[data-field="descripcion"]').textContent
+    expect(code).toContain('Ej.:')
+    expect(['911', '313', '018']).toContain(code.replace('Ej.:', '').trim())
+    expect(name).toMatch(/ATLAS|AVA|MITO/)
+  })
+
+  it('el ejemplo acompaña a cada tipo de alta (color: abreviatura y español; marca: cómo se arma)', () => {
+    const { dialog } = openForm()
+    select(dialog, '#alta-dialog-tipo', 'color')
+    expect(dialog.querySelector('.alta-example[data-field="abreviatura"]').textContent).toMatch(/Ej\.: .+/)
+    expect(dialog.querySelector('.alta-example[data-field="espanol"]').textContent).toMatch(/Ej\.: .+/)
+
+    select(dialog, '#alta-dialog-pick-marca', '__nueva__')
+    expect(dialog.querySelector('.alta-example[data-field="codigo"]').textContent).toContain('UBX')
+    expect(dialog.querySelector('.alta-example[data-field="descripcion"]').textContent).toContain('URBAX')
+    expect(dialog.querySelector('.alta-example[data-field="plantilla"]').textContent).toContain('Cascos')
+  })
+
+  it('el código sugerido de un color es un código libre (J5…K0 ya están usados): L1', () => {
+    const { dialog } = openForm()
+    select(dialog, '#alta-dialog-tipo', 'color')
+    expect(dialog.querySelector('#alta-dialog-codigo').value).toBe('L1')
+  })
+})
+
+describe('tabla de genéricos en "Altas de referencia": solo consulta', () => {
+  const buttonWith = (view, label) => [...view.querySelectorAll('button')].find((b) => b.textContent.includes(label))
+  const select = (view, id, value) =>
+    act(() => {
+      const element = view.querySelector(id)
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(element, value)
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+  it('se ve y se exporta, pero no se puede agregar: avisa que se crea al generar el SKU', () => {
+    const view = mount(<App />)
+    act(() => [...view.querySelectorAll('.sidebar__link')].find((a) => a.textContent.includes('Altas de referencia')).click())
+    select(view, '#ref-tipo', 'generico')
+
+    expect(view.querySelector('.view:not([hidden]) .reference-table tbody tr')).not.toBeNull()
+    expect(buttonWith(view, 'Agregar a esta tabla').disabled).toBe(true)
+    expect(buttonWith(view, 'Exportar esta tabla').disabled).toBe(false)
+    expect(view.querySelector('.view:not([hidden]) .alta-list__note').textContent).toContain('Los códigos genéricos no se cargan como alta')
+    expect(view.querySelector('.view:not([hidden]) .page-header__subtitle').textContent).toContain('se crean al generar el SKU')
+  })
+
+  it('las demás tablas siguen permitiendo agregar', () => {
+    const view = mount(<App />)
+    act(() => [...view.querySelectorAll('.sidebar__link')].find((a) => a.textContent.includes('Altas de referencia')).click())
+    select(view, '#ref-tipo', 'generico')
+    select(view, '#ref-tipo', 'grafica')
+    expect(buttonWith(view, 'Agregar a esta tabla').disabled).toBe(false)
+  })
+})
+
+describe('campos de alta: gris, verde o rojo según se puedan usar', () => {
+  const buttonWith = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.includes(label))
+  const typeInto = (input, value) =>
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  const stateOf = (input) => (input.classList.contains('input--valid') ? 'valid' : input.classList.contains('input--invalid') ? 'invalid' : 'neutral')
+  const openForm = () => {
+    const view = mount(<App />)
+    act(() => [...view.querySelectorAll('.sidebar__link')].find((a) => a.textContent.includes('Altas de referencia')).click())
+    act(() => buttonWith(view, 'Nueva alta').click())
+    const dialog = view.querySelector('[role="dialog"]')
+    // URBAX → calota: código (3) y nombre.
+    return { view, dialog, code: dialog.querySelector('#alta-dialog-codigo'), name: dialog.querySelector('#alta-dialog-descripcion') }
+  }
+
+  it('por defecto los campos vacíos son grises y el botón de guardar está bloqueado', () => {
+    const { dialog, code, name } = openForm()
+    expect(stateOf(code)).toBe('neutral')
+    expect(stateOf(name)).toBe('neutral')
+    expect(buttonWith(dialog, 'Guardar alta').disabled).toBe(true)
+    expect(dialog.textContent).toContain('Completá los datos obligatorios para poder guardar')
+    // Un campo vacío no se pinta de rojo hasta que se toca.
+    expect(dialog.querySelectorAll('.input--invalid')).toHaveLength(0)
+  })
+
+  it('un código que ya existe queda en rojo, con su motivo, y no deja guardar', () => {
+    const { dialog, code, name } = openForm()
+    typeInto(code, '313')
+    typeInto(name, 'NUEVA')
+    expect(stateOf(code)).toBe('invalid')
+    expect(code.getAttribute('aria-invalid')).toBe('true')
+    expect(dialog.textContent).toContain('El código 313 ya lo usa AVA')
+    expect(stateOf(name)).toBe('valid')
+    expect(buttonWith(dialog, 'Guardar alta').disabled).toBe(true)
+    expect(dialog.textContent).toContain('Corregí los datos marcados en rojo para poder guardar')
+  })
+
+  it('un código libre queda en verde con "Disponible"', () => {
+    const { dialog, code } = openForm()
+    typeInto(code, '777')
+    expect(stateOf(code)).toBe('valid')
+    expect(code.closest('.field').textContent).toContain('Disponible')
+  })
+
+  it('un nombre que ya existe también queda en rojo', () => {
+    const { dialog, code, name } = openForm()
+    typeInto(code, '777')
+    typeInto(name, 'ava')
+    expect(stateOf(name)).toBe('invalid')
+    expect(dialog.textContent).toContain('Ya existe con el código 313')
+    expect(buttonWith(dialog, 'Guardar alta').disabled).toBe(true)
+  })
+
+  it('un código con largo incorrecto queda en rojo mientras se escribe', () => {
+    const { code } = openForm()
+    typeInto(code, '77')
+    expect(stateOf(code)).toBe('invalid')
+    typeInto(code, '777')
+    expect(stateOf(code)).toBe('valid')
+  })
+
+  it('con todo en verde se puede guardar, y se guarda', () => {
+    const { view, dialog, code, name } = openForm()
+    typeInto(code, '777')
+    typeInto(name, 'NUEVA')
+    expect([stateOf(code), stateOf(name)]).toEqual(['valid', 'valid'])
+    const save = buttonWith(dialog, 'Guardar alta')
+    expect(save.disabled).toBe(false)
+    expect(dialog.textContent).not.toContain('para poder guardar')
+
+    act(() => save.click())
+    expect(view.querySelector('[role="dialog"]')).toBeNull()
+    expect(getAltas().map((alta) => alta.values.codigo)).toEqual(['777'])
+  })
+
+  it('un campo obligatorio que se tocó y se dejó vacío pasa a rojo', () => {
+    const { code, name } = openForm()
+    typeInto(name, 'X')
+    typeInto(name, '')
+    expect(stateOf(name)).toBe('invalid')
+    expect(stateOf(code)).toBe('neutral')
+  })
+
+  it('las listas desplegables obligatorias también cambian de color (familia de una tipología)', () => {
+    const { dialog } = openForm()
+    const choose = (id, value) =>
+      act(() => {
+        const element = dialog.querySelector(id)
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(element, value)
+        element.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+    choose('#alta-dialog-pick-marca', 'NTO')
+    choose('#alta-dialog-tipo', 'tipologia')
+    const family = dialog.querySelector('#alta-dialog-familia')
+    expect(stateOf(family)).toBe('neutral')
+    choose('#alta-dialog-familia', 'RAINWEAR')
+    expect(stateOf(family)).toBe('valid')
+  })
+
+  it('cambiar de tabla reinicia los colores', () => {
+    const { dialog, code } = openForm()
+    typeInto(code, '313')
+    expect(stateOf(code)).toBe('invalid')
+    act(() => {
+      const select = dialog.querySelector('#alta-dialog-tipo')
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'grafica')
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(dialog.querySelectorAll('.input--invalid')).toHaveLength(0)
+  })
+})
+
+describe('buscar casos existentes al cargar un alta', () => {
+  const buttonWith = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.includes(label))
+  const typeInto = (input, value) =>
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  const choose = (root, id, value) =>
+    act(() => {
+      const element = root.querySelector(id)
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(element, value)
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  const openForm = () => {
+    const view = mount(<App />)
+    act(() => [...view.querySelectorAll('.sidebar__link')].find((a) => a.textContent.includes('Altas de referencia')).click())
+    act(() => buttonWith(view, 'Nueva alta').click())
+    return { view, dialog: view.querySelector('[role="dialog"]') }
+  }
+  const search = (dialog) => dialog.querySelector('#alta-dialog-buscar-existentes')
+  const rows = (dialog) => [...dialog.querySelectorAll('.existing__table tbody tr')].map((row) => row.textContent)
+
+  it('muestra la barra de búsqueda con los filtros elegidos', () => {
+    const { dialog } = openForm()
+    const filters = dialog.querySelector('.existing__filters').textContent
+    expect(filters).toContain('Marca: URBAX')
+    expect(filters).toContain('Tipo: Modelo / calota de casco')
+    expect(filters).toContain('Tabla: URBAX')
+    expect(search(dialog)).not.toBeNull()
+    expect(search(dialog).placeholder).toContain('Buscar un caso existente')
+  })
+
+  it('los casos están plegados hasta que se piden: "Ver todos" o escribir', () => {
+    const { dialog } = openForm()
+    expect(dialog.querySelector('.existing__table')).toBeNull()
+
+    act(() => buttonWith(dialog, 'Ver todos (3)').click())
+    expect(rows(dialog).map((text) => text.slice(0, 3))).toEqual(['911', '313', '018'])
+    expect(dialog.querySelector('.existing').textContent).toContain('3 de 3 casos')
+
+    act(() => buttonWith(dialog, 'Ocultar casos').click())
+    expect(dialog.querySelector('.existing__table')).toBeNull()
+  })
+
+  it('al escribir se abre solo y filtra por código o nombre', () => {
+    const { dialog } = openForm()
+    typeInto(search(dialog), 'ava')
+    expect(rows(dialog)).toHaveLength(1)
+    expect(rows(dialog)[0]).toContain('AVA')
+    expect(dialog.querySelector('.existing').textContent).toContain('1 de 3 casos')
+
+    typeInto(search(dialog), '911')
+    expect(rows(dialog)[0]).toContain('ATLAS')
+
+    typeInto(search(dialog), 'zzzz')
+    expect(dialog.querySelector('.existing__table').textContent).toContain('No hay registros con esa búsqueda')
+  })
+
+  it('los filtros siguen a la marca, el tipo y la familia que se eligen en el formulario', () => {
+    const { dialog } = openForm()
+    choose(dialog, '#alta-dialog-pick-marca', 'NTO')
+    choose(dialog, '#alta-dialog-tipo', 'tipologia')
+    const filters = () => dialog.querySelector('.existing__filters').textContent
+    expect(filters()).toContain('Marca: NTO')
+    expect(filters()).toContain('Tipo: Tipología')
+
+    // La tabla necesita la familia: hasta elegirla, la búsqueda queda deshabilitada y lo explica.
+    expect(search(dialog).disabled).toBe(true)
+    act(() => buttonWith(dialog, 'Ver todos').click())
+    expect(dialog.querySelector('.existing').textContent).toContain('Elegí familia para ver los casos de esta tabla')
+
+    choose(dialog, '#alta-dialog-familia', 'RAINWEAR')
+    expect(filters()).toContain('Familia: RAINWEAR')
+    expect(search(dialog).disabled).toBe(false)
+    expect(rows(dialog).some((text) => text.includes('RAINSUIT'))).toBe(true)
+  })
+
+  it('cambiar de tabla trae los casos de la nueva y limpia la búsqueda', () => {
+    const { dialog } = openForm()
+    typeInto(search(dialog), 'ava')
+    choose(dialog, '#alta-dialog-tipo', 'grafica')
+    expect(search(dialog).value).toBe('')
+    expect(dialog.querySelector('.existing__filters').textContent).toContain('Tipo: Gráfica')
+    act(() => buttonWith(dialog, 'Ver todos').click())
+    expect(rows(dialog).some((text) => text.includes('ARCANO'))).toBe(true)
+  })
+
+  it('si lo que se escribe en el formulario ya existe, esa fila se marca', () => {
+    const { dialog } = openForm()
+    act(() => buttonWith(dialog, 'Ver todos').click())
+    expect(dialog.querySelectorAll('.existing__table tr.is-match')).toHaveLength(0)
+
+    typeInto(dialog.querySelector('#alta-dialog-codigo'), '313')
+    const marked = [...dialog.querySelectorAll('.existing__table tr.is-match')]
+    expect(marked).toHaveLength(1)
+    expect(marked[0].textContent).toContain('AVA')
+
+    typeInto(dialog.querySelector('#alta-dialog-codigo'), '777')
+    expect(dialog.querySelectorAll('.existing__table tr.is-match')).toHaveLength(0)
+  })
+
+  it('una alta recién creada aparece en la lista como nueva', () => {
+    const { view, dialog } = openForm()
+    typeInto(dialog.querySelector('#alta-dialog-codigo'), '777')
+    typeInto(dialog.querySelector('#alta-dialog-descripcion'), 'NUEVA')
+    act(() => buttonWith(dialog, 'Guardar alta').click())
+
+    act(() => buttonWith(view, 'Nueva alta').click())
+    const second = view.querySelector('[role="dialog"]')
+    typeInto(second.querySelector('#alta-dialog-buscar-existentes'), 'nueva')
+    const found = [...second.querySelectorAll('.existing__table tbody tr')]
+    expect(found).toHaveLength(1)
+    expect(found[0].textContent).toContain('Nueva · pendiente')
+  })
+
+  it('también está al agregar desde una tabla del explorador (la tabla ya viene elegida)', () => {
+    const view = mount(<App />)
+    act(() => [...view.querySelectorAll('.sidebar__link')].find((a) => a.textContent.includes('Altas de referencia')).click())
+    act(() => buttonWith(view, 'Agregar a esta tabla').click())
+    const dialog = view.querySelector('[role="dialog"]')
+    expect(dialog.querySelector('.existing__filters').textContent).toContain('Tipo: Modelo / calota de casco')
+    typeInto(dialog.querySelector('#alta-dialog-buscar-existentes'), 'mito')
+    expect(rows(dialog)[0]).toContain('MITO')
+  })
+})
+
+describe('vista "Códigos repetidos" en las tablas de referencia', () => {
+  const buttonWith = (root, label) => [...root.querySelectorAll('button')].find((b) => b.textContent.includes(label))
+  const select = (view, id, value) =>
+    act(() => {
+      const element = view.querySelector(id)
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(element, value)
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  const typeInto = (input, value) =>
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  const openPage = () => {
+    const view = mount(<App />)
+    act(() => [...view.querySelectorAll('.sidebar__link')].find((a) => a.textContent.includes('Altas de referencia')).click())
+    return view
+  }
+  const tab = (view, label) => [...view.querySelectorAll('.view:not([hidden]) [role="tab"]')].find((t) => t.textContent.includes(label))
+  const dupRows = (view) => [...view.querySelectorAll('.view:not([hidden]) .dup-table tbody tr.dup__case')]
+
+  it('hay una pestaña con la cantidad de códigos repetidos de todas las tablas', () => {
+    const view = openPage()
+    expect(tab(view, 'Una tabla').getAttribute('aria-selected')).toBe('true')
+    expect(tab(view, 'Códigos repetidos').textContent).toMatch(/Códigos repetidos \(\d+\)/)
+
+    act(() => tab(view, 'Códigos repetidos').click())
+    expect(tab(view, 'Códigos repetidos').getAttribute('aria-selected')).toBe('true')
+    const rows = dupRows(view)
+    expect(rows.length).toBeGreaterThan(30)
+    const text = view.querySelector('.view:not([hidden]) .dup-table').textContent
+    ;['Conjunto de colores', 'Gráfica', 'Modelo / calota de casco'].forEach((table) => expect(text).toContain(table))
+    // Los códigos genéricos no se cuentan: se crean al generar el SKU.
+    expect(text).not.toContain('Código genérico')
+  })
+
+  it('muestra el código con todos los nombres que lo usan y su situación', () => {
+    const view = openPage()
+    act(() => tab(view, 'Códigos repetidos').click())
+    // "RAINBOW" también figura en otro código (H3): la búsqueda trae los dos y se distingue por el código.
+    typeInto(view.querySelector('#ref-buscar'), 'rainbow')
+    expect(dupRows(view).length).toBeGreaterThanOrEqual(2)
+    const row = dupRows(view).find((item) => item.querySelector('.mono').textContent === 'A0')
+    expect(row.textContent).toContain('RAINBOW / RED BLUE MATT')
+    expect(row.textContent).toContain('2 nombres distintos')
+  })
+
+  it('se filtra por marca y familia', () => {
+    const view = openPage()
+    act(() => tab(view, 'Códigos repetidos').click())
+    const all = dupRows(view).length
+    select(view, '#ref-marca', 'UBX')
+    const tables = new Set(dupRows(view).map((row) => row.querySelector('.dup__tabla').textContent))
+    expect([...tables].sort()).toEqual(['Conjunto de colores · Cascos MAC / URBAX', 'Gráfica · Cascos URBAX'])
+    expect(dupRows(view).length).toBeLessThan(all)
+    expect(tab(view, 'Códigos repetidos').textContent).toContain('(27)')
+
+    select(view, '#ref-marca', 'NTO')
+    expect(dupRows(view).some((row) => row.textContent.includes('Cascos'))).toBe(false)
+  })
+
+  it('la tabla es angosta: chevron, código, nombres, tabla y situación', () => {
+    const view = openPage()
+    act(() => tab(view, 'Códigos repetidos').click())
+    const headers = [...view.querySelectorAll('.view:not([hidden]) .dup-table thead th')].map((th) => th.textContent.trim())
+    expect(headers).toEqual(['Detalle', 'Código', 'Nombres que lo usan', 'Tabla', 'Situación'])
+    // La situación lleva la cantidad: no hay columnas aparte para "Veces" ni "Ámbito".
+    expect(view.querySelector('.view:not([hidden]) .dup-table').textContent).not.toContain('Ver en la tabla')
+    expect(dupRows(view)[0].querySelector('.badge').textContent).toMatch(/nombres distintos|Mismo nombre · \d+ veces/)
+  })
+
+  it('el chevron del inicio despliega los casos debajo, y vuelve a plegarlos', () => {
+    const view = openPage()
+    act(() => tab(view, 'Códigos repetidos').click())
+    typeInto(view.querySelector('#ref-buscar'), 'rainbow')
+    const caseRow = () => dupRows(view).find((item) => item.querySelector('.mono').textContent === 'A0')
+    const toggle = () => caseRow().querySelector('.dup__toggle')
+
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(view.querySelector('.view:not([hidden]) .dup__detail')).toBeNull()
+
+    act(() => toggle().click())
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+    expect(toggle().getAttribute('aria-label')).toBe('Ocultar el detalle del código A0')
+    // El detalle queda justo debajo del caso: las filas reales de la tabla que usan ese código.
+    const detail = caseRow().nextElementSibling
+    expect(detail.classList.contains('dup__detail')).toBe(true)
+    const records = [...detail.querySelectorAll('.dup__detail-table tbody tr')]
+    expect(records).toHaveLength(2)
+    expect(records.map((row) => row.textContent).join(' ')).toContain('RAINBOW')
+    expect(records.map((row) => row.textContent).join(' ')).toContain('RED BLUE MATT')
+    expect(records.map((row) => row.textContent).join(' ')).toContain('RD/BL MT')
+    records.forEach((row) => expect(row.textContent).toContain('Existente'))
+
+    act(() => toggle().click())
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(view.querySelector('.view:not([hidden]) .dup__detail')).toBeNull()
+  })
+
+  it('se pueden abrir varios casos a la vez, cada uno con su detalle', () => {
+    const view = openPage()
+    act(() => tab(view, 'Códigos repetidos').click())
+    select(view, '#ref-marca', 'UBX')
+    select(view, '#ref-familia-filtro', 'CASCOS')
+    const rows = dupRows(view)
+    act(() => rows[0].querySelector('.dup__toggle').click())
+    act(() => dupRows(view)[2].querySelector('.dup__toggle').click())
+    expect(view.querySelectorAll('.view:not([hidden]) .dup__detail')).toHaveLength(2)
+    dupRows(view).forEach((row, index) => {
+      if ([0, 2].includes(index)) expect(row.querySelector('.dup__toggle').getAttribute('aria-expanded')).toBe('true')
+    })
+  })
+
+  it('en cada detalle solo están las filas de ese código y de esa tabla', () => {
+    const view = openPage()
+    act(() => tab(view, 'Códigos repetidos').click())
+    select(view, '#ref-marca', 'UBX')
+    typeInto(view.querySelector('#ref-buscar'), 'solid')
+    const row = dupRows(view).find((item) => item.querySelector('.mono').textContent === '11')
+    act(() => row.querySelector('.dup__toggle').click())
+    const detail = row.nextElementSibling
+    expect([...detail.querySelectorAll('.dup__detail-table tbody tr')].map((item) => item.querySelector('.mono').textContent)).toEqual(['11', '11'])
+    expect(detail.textContent).toContain('SOLID')
+    expect(detail.textContent).toContain('RINO')
+    expect(detail.textContent).not.toContain('OTUS')
+  })
+
+  it('en una tabla, los códigos repetidos llevan su etiqueta y se pueden mostrar solos', () => {
+    const view = openPage()
+    select(view, '#ref-marca', 'UBX')
+    select(view, '#ref-tipo', 'grafica')
+    const note = view.querySelector('.view:not([hidden]) .alta-list__note').textContent
+    expect(note).toContain('2 códigos repetidos en esta tabla')
+
+    const all = view.querySelectorAll('.view:not([hidden]) .reference-table tbody tr').length
+    expect(all).toBe(26)
+    act(() => view.querySelector('#ref-solo-repetidos').click())
+    const only = [...view.querySelectorAll('.view:not([hidden]) .reference-table tbody tr')]
+    expect(only).toHaveLength(4)
+    only.forEach((row) => expect(row.textContent).toContain('Código repetido'))
+  })
+
+  it('la tabla de genéricos no marca códigos repetidos ni ofrece el filtro (se crean al generar el SKU)', () => {
+    const view = openPage()
+    select(view, '#ref-tipo', 'generico')
+    expect(view.querySelectorAll('.view:not([hidden]) .reference-table tbody tr').length).toBeGreaterThan(100)
+    expect(view.querySelector('.view:not([hidden]) .reference-table').textContent).not.toContain('Código repetido')
+    expect(view.querySelector('#ref-solo-repetidos')).toBeNull()
+    expect(view.querySelector('.view:not([hidden]) .alta-list__note').textContent).not.toContain('códigos repetidos en esta tabla')
+  })
+
+  it('una tabla sin repetidos no muestra el filtro', () => {
+    const view = openPage()
+    select(view, '#ref-marca', 'UBX')
+    select(view, '#ref-tipo', 'tipologia')
+    expect(view.querySelector('#ref-solo-repetidos')).toBeNull()
+  })
+
+  it('se puede exportar lo que se ve', () => {
+    const view = openPage()
+    act(() => tab(view, 'Códigos repetidos').click())
+    expect(buttonWith(view, 'Exportar repetidos').disabled).toBe(false)
+    typeInto(view.querySelector('#ref-buscar'), 'zzzz')
+    expect(view.querySelector('.view:not([hidden]) .dup-table').textContent).toContain('No hay códigos repetidos con esa búsqueda')
+    expect(buttonWith(view, 'Exportar repetidos').disabled).toBe(true)
   })
 })

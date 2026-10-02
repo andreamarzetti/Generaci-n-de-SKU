@@ -7,6 +7,7 @@ import { ActionBar } from '../components/sku/ActionBar'
 import { AppliedRulesInfo } from '../components/sku/AppliedRules'
 import { AuditInfo } from '../components/sku/AuditInfo'
 import { BatchInput } from '../components/sku/BatchInput'
+import { ImageUploadStep } from '../components/images/ImageUploadStep'
 import { ConfirmationBanner } from '../components/sku/ConfirmationBanner'
 import { FamilyFields } from '../components/sku/FamilyFields'
 import { FamilySelector } from '../components/sku/FamilySelector'
@@ -186,6 +187,7 @@ export function Ls2Workspace({ brandField, hidden = false, topSlot = null, loadR
         </>
       )}
     </>,
+    <ImageUploadStep key={sku.lastConfirmation?.signature} confirmation={sku.isConfirmed ? sku.lastConfirmation : null} />,
   ]
 
   return (

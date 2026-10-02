@@ -9,6 +9,7 @@ import { PendingAltasNotice } from '../components/reference/PendingAltasNotice'
 import { ActionBar } from '../components/sku/ActionBar'
 import { AppliedRulesInfo } from '../components/sku/AppliedRules'
 import { AuditInfo } from '../components/sku/AuditInfo'
+import { ImageUploadStep } from '../components/images/ImageUploadStep'
 import { ConfirmationBanner } from '../components/sku/ConfirmationBanner'
 import { GenericSelect } from '../components/sku/GenericSelect'
 import { SkuComposition } from '../components/sku/SkuComposition'
@@ -168,6 +169,7 @@ export function EngineWorkspace({
         </>
       )}
     </>,
+    <ImageUploadStep key={gen.lastConfirmation?.signature} confirmation={gen.isConfirmed ? gen.lastConfirmation : null} />,
   ]
 
   return (

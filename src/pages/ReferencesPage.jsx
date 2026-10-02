@@ -46,7 +46,7 @@ export function ReferencesPage() {
 
   return (
     <main className="main">
-      <PageHeader title="Altas de referencia" subtitle="Datos nuevos que todavía no están en CODIFICACION 2023: marcas, modelos, gráficas, colores y genéricos." />
+      <PageHeader title="Altas de referencia" subtitle="Datos nuevos que todavía no están en CODIFICACION 2023: marcas, modelos, gráficas, colores, tipologías y artículos. Los códigos genéricos no se cargan acá: se crean al generar el SKU." />
 
       <div className="wizard__panel">
         <ReferenceTables />

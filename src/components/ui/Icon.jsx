@@ -85,6 +85,7 @@ const ICONS = {
     ['path', 'M4 4v7a4 4 0 0 0 4 4h12'],
   ],
   alert: [['path', 'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'], ['path', 'M12 9v4'], ['path', 'M12 17h.01']],
+  search: [['circle', { cx: 11, cy: 11, r: 8 }], ['path', 'm21 21-4.3-4.3']],
   chevronDown: [['path', 'm6 9 6 6 6-6']],
   chevronRight: [['path', 'm9 18 6-6-6-6']],
   chevronUp: [['path', 'm18 15-6-6-6 6']],
@@ -95,6 +96,11 @@ const ICONS = {
     ['path', 'M3 6h.01'],
     ['path', 'M3 12h.01'],
     ['path', 'M3 18h.01'],
+  ],
+  image: [
+    ['rect', { x: 3, y: 3, width: 18, height: 18, rx: 2, ry: 2 }],
+    ['circle', { cx: 8.5, cy: 8.5, r: 1.5 }],
+    ['path', 'm21 15-5-5L5 21'],
   ],
   database: [
     ['ellipse', { cx: 12, cy: 5, rx: 9, ry: 3 }],

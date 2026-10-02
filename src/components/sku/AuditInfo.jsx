@@ -1,11 +1,12 @@
 import { GENERICOS_REPETIDOS } from '../../data/realData'
-import { auditLegacySizes, auditLongSkus, auditStructureAnomalies } from '../../rules/audit'
+import { auditDuplicateCodes, auditLegacySizes, auditLongSkus, auditStructureAnomalies } from '../../rules/audit'
 import { COLOR_ALIASES } from '../../rules/descriptions'
 import { InfoPopup } from '../ui/InfoPopup'
 
 const LONG_SKUS = auditLongSkus()
 const ANOMALIES = auditStructureAnomalies()
 const LEGACY_SIZES = auditLegacySizes()
+const DUPLICATE_CODES = auditDuplicateCodes()
 
 // Quién hizo el cambio. Fijo por ahora, hasta tener el usuario logueado.
 const CHANGED_BY = 'NOMBRE'
@@ -98,6 +99,17 @@ export function AuditInfo() {
 
       <h3 className="rules__subtitle">Para revisar con Andrés</h3>
       <ul className="audit__findings">
+        {DUPLICATE_CODES.map(({ tabla, repetidos }) => (
+          <li key={tabla}>
+            <strong>{tabla}:</strong> {repetidos.length} {repetidos.length === 1 ? 'código figura' : 'códigos figuran'} para más de un nombre (dos SKU distintos
+            quedarían iguales). Ej.:{' '}
+            {repetidos
+              .slice(0, 3)
+              .map(({ codigo, nombres }) => `${codigo} (${nombres.join(' / ')})`)
+              .join(' · ')}
+            .
+          </li>
+        ))}
         <li>
           Errores de tipeo en la tabla de colores de LS2:{' '}
           {COLOR_ALIASES.filter((alias) => alias.note.includes('dice')).map((alias) => alias.note.replace('la tabla dice ', '')).join(', ')}.
